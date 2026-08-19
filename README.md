@@ -9,36 +9,46 @@ actually available right now, borrow a copy, give it back, and find the next thi
 
 ## Running it
 
-**Prerequisites**
+### You need
 
-| | Version | Needed for |
+| | Version | For |
 |---|---|---|
-| .NET SDK | **10.0** | everything (`net10.0`; an older SDK will refuse to build) |
-| Node | **20.9+** | the frontend (Next.js 16's own requirement) |
-| Docker | any | optional — only to run the tests against PostgreSQL |
+| **.NET SDK** | **10.0** | everything. `global.json` pins it, so an older SDK fails immediately with a clear message instead of something cryptic further in |
+| **Node** | **20.9+** | the frontend only. Next.js 16's own requirement |
+| Docker | any | optional. Only to run the test suite against PostgreSQL |
 
-`global.json` pins the SDK, so a machine on .NET 9 fails immediately with a clear message
-rather than something cryptic further in.
+The backend needs no Node and the frontend needs no .NET. They are separate applications
+that speak HTTP, and the solution is arranged so you can work on either without the other's
+toolchain installed.
 
-**Two terminals:**
+### Then, in two terminals
 
 ```bash
-# 1 — the API. Creates bokmal.db, migrates it, fills it with a demo library.
+# 1 — the API.
+#     Creates bokmal.db, migrates it, and fills it with a demo library on first run.
 dotnet run --project src/Bokmal.Api
 ```
 
 ```bash
-# 2 — the frontend
+# 2 — the frontend. The npm install is required; nothing else is.
 cd src/Bokmal.Web
 npm install
 npm run dev
 ```
 
-Then open **http://localhost:3000**. The API is on `http://localhost:5080`, and its OpenAPI
-document is at `/openapi/v1.json`.
+Open **http://localhost:3000**.
 
-Nothing else to configure. The database is a file, it is created on first run, and deleting
-`src/Bokmal.Api/bokmal.db` gives you a clean library.
+The API listens on `http://localhost:5080` and publishes its OpenAPI document at
+`/openapi/v1.json`. Point the frontend elsewhere with `BOKMAL_API_URL` if you need to; see
+`.env.example`.
+
+Nothing else to configure. The database is a file, created on first run. Delete
+`src/Bokmal.Api/bokmal.db` for a clean library.
+
+> **Opening the solution.** `Bokmal.Web` appears in Solution Explorer so the frontend can be
+> read alongside the backend, but it is **excluded from the solution build** — `next build`
+> is npm's job, not MSBuild's. Building or running the frontend is done with npm, from
+> VS Code or a terminal. `Bokmal.slnx` requires Visual Studio 17.13 or later.
 
 **Signing in.** There are no passwords — see [Identity](#identity-is-not-authentication)
 below. The sign-in page lists members you can sign in as, with a copy button next to each
@@ -63,8 +73,8 @@ tests/
   Bokmal.Tests/        42 tests, runnable against either database engine
 ```
 
-`Bokmal.Web` appears in Solution Explorer as solution folders rather than a project. See
-the comment in `Bokmal.slnx` for why.
+`Bokmal.Web` is in the solution as a JavaScript project so it can be browsed from Solution
+Explorer, with the solution build turned off for it. The reasoning is in `Bokmal.slnx`.
 
 ---
 

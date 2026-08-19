@@ -2,51 +2,24 @@
   <Folder Name="/src/">
     <Project Path="src/Bokmal.Api/Bokmal.Api.csproj" />
     <Project Path="src/Bokmal.Database/Bokmal.Database.csproj" />
+
+    <!--
+      The frontend, present so it can be browsed from Solution Explorer, but excluded from
+      the solution build.
+
+      It is not built by MSBuild because it is not built by MSBuild anywhere: `next build`
+      is driven by npm, and wiring that into the solution would make `dotnet build` depend
+      on Node being installed and node_modules being restored. The C# side has to keep
+      building on a machine that has never run npm.
+
+      The usual split applies anyway. The frontend is developed in VS Code and the backend
+      in Visual Studio; this node is here to read and navigate, not to compile.
+    -->
+    <Project Path="src/Bokmal.Web/Bokmal.Web.esproj">
+      <Build Solution="*|*" Project="false" />
+    </Project>
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Bokmal.Tests/Bokmal.Tests.csproj" />
-  </Folder>
-
-  <!--
-    The frontend, as solution folders rather than a project.
-
-    A .esproj would give a real project node, but Microsoft.VisualStudio.JavaScript.Sdk
-    targets net6.0-none, which the .NET 10 SDK refuses to restore (NU1012). Listing the files
-    instead costs nothing, participates in no build, and cannot break `dotnet build` on a
-    machine that has never installed Node. The C# side has to keep working there regardless.
-
-    node_modules, .next and generated/ are left out deliberately. The generated API client is
-    produced by `npm run generate-api` and is not source to be read here.
-  -->
-  <Folder Name="/Bokmal.Web/">
-    <File Path="src/Bokmal.Web/package.json" />
-    <File Path="src/Bokmal.Web/tsconfig.json" />
-    <File Path="src/Bokmal.Web/next.config.ts" />
-    <File Path="src/Bokmal.Web/openapi-ts.config.ts" />
-    <File Path="src/Bokmal.Web/postcss.config.mjs" />
-    <File Path="src/Bokmal.Web/eslint.config.mjs" />
-    <File Path="src/Bokmal.Web/.env.example" />
-  </Folder>
-  <Folder Name="/Bokmal.Web/app/">
-    <File Path="src/Bokmal.Web/app/layout.tsx" />
-    <File Path="src/Bokmal.Web/app/page.tsx" />
-    <File Path="src/Bokmal.Web/app/globals.css" />
-    <File Path="src/Bokmal.Web/app/books/[slug]/page.tsx" />
-    <File Path="src/Bokmal.Web/app/loans/page.tsx" />
-    <File Path="src/Bokmal.Web/app/top/page.tsx" />
-    <File Path="src/Bokmal.Web/app/sign-in/page.tsx" />
-    <File Path="src/Bokmal.Web/app/sign-in/SignInForm.tsx" />
-    <File Path="src/Bokmal.Web/app/sign-in/CopyEmailButton.tsx" />
-  </Folder>
-  <Folder Name="/Bokmal.Web/components/">
-    <File Path="src/Bokmal.Web/components/BookCard.tsx" />
-    <File Path="src/Bokmal.Web/components/BookCover.tsx" />
-    <File Path="src/Bokmal.Web/components/LoanButtons.tsx" />
-    <File Path="src/Bokmal.Web/components/Mascot.tsx" />
-  </Folder>
-  <Folder Name="/Bokmal.Web/lib/">
-    <File Path="src/Bokmal.Web/lib/api.ts" />
-    <File Path="src/Bokmal.Web/lib/actions.ts" />
-    <File Path="src/Bokmal.Web/lib/session.ts" />
   </Folder>
 </Solution>
