@@ -1,4 +1,20 @@
 <Solution>
+  <!-- The first thing anyone opening this should read. -->
+  <File Path="README.md" />
+
+  <!--
+    Files that apply to the whole solution rather than to any one project. BannedSymbols
+    and .editorconfig belong together: the first lists the APIs that are compile errors,
+    the second is what raises them from a suggestion to an error. Anyone who hits RS0030
+    needs to find both.
+  -->
+  <Folder Name="/Build/">
+    <File Path="global.json" />
+    <File Path="Directory.Build.props" />
+    <File Path="BannedSymbols.txt" />
+    <File Path=".editorconfig" />
+  </Folder>
+
   <Folder Name="/src/">
     <Project Path="src/Bokmal.Api/Bokmal.Api.csproj" />
     <Project Path="src/Bokmal.Database/Bokmal.Database.csproj" />
