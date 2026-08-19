@@ -1,0 +1,17 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = crlf
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{json,yml,yaml,ts,tsx,js,jsx,css}]
+indent_size = 2
+
+[*.cs]
+# Reaching for a banned API is a compile error, not a suggestion. The whole point is that
+# it cannot be forgotten or reviewed past -- see BannedSymbols.txt for what and why.
+dotnet_diagnostic.RS0030.severity = error

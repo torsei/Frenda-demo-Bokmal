@@ -1,0 +1,248 @@
+using Bokmal.Database;
+using Bokmal.Database.Entities;
+using Bokmal.Tests.Databases;
+using Microsoft.EntityFrameworkCore;
+
+namespace Bokmal.Tests;
+
+/// <summary>
+/// The top list and the recommendations.
+///
+/// Both are built from loan history, so these tests write history directly rather than
+/// borrowing and returning through the service. That keeps each test's premise visible: the
+/// point of a recommendation test is which books which people read, and routing that through
+/// the loan flow would bury it under twenty lines of setup.
+/// </summary>
+public class DiscoveryTests
+{
+    /// <summary>Writes a finished loan straight into history.</summary>
+    private static async Task RecordLoanAsync(
+        BokmalDbContext context,
+        string bookSlug,
+        string borrowerEmail,
+        int days = 7)
+    {
+        var copyId = await context.BookCopies
+            .Where(c => c.Book.Slug == bookSlug)
+            .OrderBy(c => c.CopyNumber)
+            .Select(c => c.Id)
+            .FirstAsync();
+
+        var borrowerId = await context.Borrowers
+            .Where(b => b.Email == borrowerEmail)
+            .Select(b => b.Id)
+            .SingleAsync();
+
+        var borrowedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        context.Loans.Add(new Loan
+        {
+            Id = BokmalId.New(),
+            BookCopyId = copyId,
+            BorrowerId = borrowerId,
+            BorrowedAt = borrowedAt,
+            DueAt = borrowedAt.AddDays(LoanPolicy.LoanPeriodDays),
+            ReturnedAt = borrowedAt.AddDays(days)
+        });
+
+        await context.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task The_top_list_ranks_by_how_often_a_book_was_borrowed()
+    {
+        using var library = await Library.WithAsync(b => b
+            .Book("popular", copies: 1).Book("middling", copies: 1).Book("ignored", copies: 1)
+            .Borrower("a@example.se").Borrower("b@example.se").Borrower("c@example.se"));
+
+        await using var context = library.CreateContext();
+
+        foreach (var reader in new[] { "a", "b", "c" })
+            await RecordLoanAsync(context, "popular", $"{reader}@example.se");
+
+        await RecordLoanAsync(context, "middling", "a@example.se");
+
+        var top = await library.CreateDiscoveryService(context).TopBorrowedAsync(10, default);
+
+        Assert.Equal("popular", top[0].Book.Slug);
+        Assert.Equal(3, top[0].BorrowCount);
+        Assert.Equal("middling", top[1].Book.Slug);
+
+        // A book nobody borrowed still belongs in the catalogue, just at the bottom.
+        Assert.Equal("ignored", top[2].Book.Slug);
+        Assert.Equal(0, top[2].BorrowCount);
+    }
+
+    [Fact]
+    public async Task A_book_never_recommends_itself()
+    {
+        using var library = await Library.WithAsync(b => b
+            .Book("dune", copies: 1).Book("neuromancer", copies: 1)
+            .Borrower("a@example.se").Borrower("b@example.se").Borrower("c@example.se"));
+
+        await using var context = library.CreateContext();
+
+        foreach (var reader in new[] { "a", "b", "c" })
+        {
+            await RecordLoanAsync(context, "dune", $"{reader}@example.se");
+            await RecordLoanAsync(context, "neuromancer", $"{reader}@example.se");
+        }
+
+        var dune = await context.Books.SingleAsync(b => b.Slug == "dune");
+        var recommendations = await library.CreateDiscoveryService(context)
+            .RecommendationsForAsync(dune.Id, limit: 5, default);
+
+        Assert.DoesNotContain(recommendations, r => r.Book.Slug == "dune");
+    }
+
+    [Fact]
+    public async Task A_single_shared_reader_is_not_enough_to_be_recommended()
+    {
+        using var library = await Library.WithAsync(b => b
+            .Book("dune", copies: 1).Book("coincidence", copies: 1)
+            .Borrower("a@example.se").Borrower("b@example.se").Borrower("c@example.se"));
+
+        await using var context = library.CreateContext();
+
+        foreach (var reader in new[] { "a", "b", "c" })
+            await RecordLoanAsync(context, "dune", $"{reader}@example.se");
+
+        await RecordLoanAsync(context, "coincidence", "a@example.se");
+
+        var dune = await context.Books.SingleAsync(b => b.Slug == "dune");
+        var recommendations = await library.CreateDiscoveryService(context)
+            .RecommendationsForAsync(dune.Id, limit: 5, default);
+
+        Assert.Empty(recommendations);
+    }
+
+    /// <summary>
+    /// The test the recommendation query was rewritten for.
+    ///
+    /// Everyone in this library has read the bestseller. Dune's readers have also all read
+    /// its companion. Counting shared readers, the bestseller ties or wins -- and the first
+    /// version of this feature duly recommended the library's most popular book to everybody,
+    /// which is true and useless.
+    ///
+    /// Weighing the overlap against how widely read the candidate is anyway asks a better
+    /// question: are Dune's readers *unusually* likely to have read this? For the bestseller
+    /// the answer is no, everybody is, so it drops out.
+    /// </summary>
+    [Fact]
+    public async Task A_book_everybody_reads_is_not_recommended_to_everybody()
+    {
+        var readers = new[] { "a", "b", "c", "d", "e", "f" };
+
+        using var library = await Library.WithAsync(builder =>
+        {
+            builder.Book("dune", copies: 1).Book("companion", copies: 1).Book("bestseller", copies: 1);
+            foreach (var reader in readers) builder.Borrower($"{reader}@example.se");
+        });
+
+        await using var context = library.CreateContext();
+
+        // Everybody reads the bestseller.
+        foreach (var reader in readers)
+            await RecordLoanAsync(context, "bestseller", $"{reader}@example.se");
+
+        // Half of them read Dune, and exactly those also read its companion.
+        foreach (var reader in readers.Take(3))
+        {
+            await RecordLoanAsync(context, "dune", $"{reader}@example.se");
+            await RecordLoanAsync(context, "companion", $"{reader}@example.se");
+        }
+
+        var dune = await context.Books.SingleAsync(b => b.Slug == "dune");
+        var recommendations = await library.CreateDiscoveryService(context)
+            .RecommendationsForAsync(dune.Id, limit: 5, default);
+
+        Assert.Equal("companion", Assert.Single(recommendations).Book.Slug);
+    }
+
+    [Fact]
+    public async Task A_library_where_everybody_has_read_everything_recommends_nothing()
+    {
+        // Surprising the first time it happens, and correct. When every member has read both
+        // books, the overlap is total but so is the overlap with everything else -- readers
+        // of one are no more likely than anyone to have read the other, because there is no
+        // "anyone" left to compare against. Recommending on that would be recommending noise.
+        //
+        // Written down because it looks like a bug in a small test fixture, and someone will
+        // eventually be tempted to "fix" it by dropping the threshold.
+        using var library = await Library.WithAsync(b => b
+            .Book("dune", copies: 1).Book("companion", copies: 1)
+            .Borrower("a@example.se").Borrower("b@example.se").Borrower("c@example.se"));
+
+        await using var context = library.CreateContext();
+
+        foreach (var reader in new[] { "a", "b", "c" })
+        {
+            await RecordLoanAsync(context, "dune", $"{reader}@example.se");
+            await RecordLoanAsync(context, "companion", $"{reader}@example.se");
+        }
+
+        var dune = await context.Books.SingleAsync(b => b.Slug == "dune");
+
+        Assert.Empty(await library.CreateDiscoveryService(context)
+            .RecommendationsForAsync(dune.Id, limit: 5, default));
+    }
+
+    [Fact]
+    public async Task Recommendations_carry_the_availability_the_reader_needs_to_act_on_them()
+    {
+        // Six members, not three. With a membership where everybody has read everything the
+        // overlap between any two books is total, no book is more associated with another
+        // than chance would give, and the query correctly returns nothing -- which is right
+        // but makes for a useless fixture.
+        using var library = await Library.WithAsync(builder =>
+        {
+            builder.Book("dune", copies: 1).Book("companion", copies: 2).Book("elsewhere", copies: 1);
+            foreach (var reader in new[] { "a", "b", "c", "d", "e", "f" })
+                builder.Borrower($"{reader}@example.se");
+        });
+
+        await using var context = library.CreateContext();
+
+        foreach (var reader in new[] { "a", "b", "c" })
+        {
+            await RecordLoanAsync(context, "dune", $"{reader}@example.se");
+            await RecordLoanAsync(context, "companion", $"{reader}@example.se");
+        }
+
+        foreach (var reader in new[] { "d", "e", "f" })
+            await RecordLoanAsync(context, "elsewhere", $"{reader}@example.se");
+
+        var dune = await context.Books.SingleAsync(b => b.Slug == "dune");
+        var recommendation = Assert.Single(await library.CreateDiscoveryService(context)
+            .RecommendationsForAsync(dune.Id, limit: 5, default));
+
+        Assert.Equal(2, recommendation.Availability.TotalCopies);
+        Assert.Equal(2, recommendation.Availability.AvailableCopies);
+        Assert.Equal(3, recommendation.SharedBorrowers);
+    }
+
+    [Fact]
+    public async Task The_catalogue_reports_availability_and_reading_time_together()
+    {
+        using var library = await Library.WithAsync(b => b
+            .Book("dune", copies: 3, pageCount: 400).Borrower("a@example.se"));
+
+        await using var context = library.CreateContext();
+
+        foreach (var days in new[] { 6, 8, 10, 12 })
+            await RecordLoanAsync(context, "dune", "a@example.se", days);
+
+        var astrid = await library.BorrowerIdAsync("a@example.se");
+        await library.CreateLoanService(context).BorrowAsync(astrid, "dune", default);
+
+        await using var reader = library.CreateContext();
+        var entry = await library.CreateCatalogueService(reader).FindAsync("dune", default);
+
+        Assert.NotNull(entry);
+        Assert.Equal(3, entry.Availability.TotalCopies);
+        Assert.Equal(2, entry.Availability.AvailableCopies);
+        Assert.Equal(1, entry.Availability.OnLoanCopies);
+        Assert.True(entry.ReadingTime.FromHistory);
+        Assert.Equal(9, entry.ReadingTime.TypicalDays);
+    }
+}

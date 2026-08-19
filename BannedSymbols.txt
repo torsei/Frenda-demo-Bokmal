@@ -1,0 +1,11 @@
+# APIs that are easy to reach for by reflex and wrong here. Calling one is a compile
+# error (RS0030, raised to error in .editorconfig) with the message after the semicolon.
+#
+# Format: {documentation comment ID};{message}
+
+M:System.Guid.NewGuid;Use BokmalId.New(). Guid.NewGuid() produces a random v4 value that fragments every index it is inserted into; BokmalId.New() produces a time-ordered v7.
+
+P:System.DateTime.Now;Take a TimeProvider and call GetUtcNow(). Reading the clock directly makes the behaviour untestable and drags local time into stored data.
+P:System.DateTime.UtcNow;Take a TimeProvider and call GetUtcNow(). Reading the clock directly makes the behaviour untestable.
+P:System.DateTimeOffset.Now;Take a TimeProvider and call GetUtcNow(). Reading the clock directly makes the behaviour untestable and drags local time into stored data.
+P:System.DateTimeOffset.UtcNow;Take a TimeProvider and call GetUtcNow(). Reading the clock directly makes the behaviour untestable.
