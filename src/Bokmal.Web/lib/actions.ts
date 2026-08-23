@@ -3,24 +3,10 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { api } from './api';
+import { problemMessage } from './problem';
 import { clearCurrentBorrower, setCurrentBorrowerEmail } from './session';
 
 export type ActionResult = { error: string } | { ok: true };
-
-/**
- * A failed borrow is not an exception. Every way it can fail -- the last copy went, you
- * already have this one, you are at your limit -- is a sentence the person needs to read,
- * and the API sends that sentence in the problem details. Passing it through beats
- * inventing a generic "something went wrong" on top of a message that was already good.
- */
-function problemMessage(error: unknown, fallback: string): string {
-  if (error && typeof error === 'object' && 'detail' in error) {
-    const detail = (error as { detail?: unknown }).detail;
-    if (typeof detail === 'string' && detail.length > 0) return detail;
-  }
-
-  return fallback;
-}
 
 export async function signIn(formData: FormData): Promise<ActionResult> {
   const email = String(formData.get('email') ?? '').trim().toLowerCase();

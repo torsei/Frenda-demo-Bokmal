@@ -70,7 +70,7 @@ src/
   Bokmal.Api/          controllers, services, the loan flow
   Bokmal.Web/          Next.js frontend
 tests/
-  Bokmal.Tests/        44 tests, runnable against either database engine
+  Bokmal.Tests/        60 tests, runnable against either database engine
 ```
 
 `Bokmal.Web` is in the solution as a JavaScript project so it can be browsed from Solution
@@ -324,9 +324,11 @@ copyrighted, and a cover API would add a network dependency that breaks the app 
 ```bash
 dotnet test                                    # SQLite — about a second
 BOKMAL_TEST_PROVIDER=Postgres dotnet test      # PostgreSQL via Testcontainers — needs Docker
+
+cd src/Bokmal.Web && npm test                  # the frontend
 ```
 
-44 tests, green on both.
+60 backend tests, green on both engines, and 18 on the frontend.
 
 Every test corresponds to one rule, so a failure says which rule broke. What is deliberately
 *not* tested: EF mappings, controller model binding, React components. Those test the
@@ -343,13 +345,21 @@ and one is already out.
 
 | Suite | | |
 |---|---|---|
-| `BorrowFlowTests` | 8 | the loan flow and its concurrency |
+| `ApiEndpointTests` | 16 | the HTTP layer: which outcome becomes which status code |
 | `DiscoveryTests` | 9 | top list, recommendations, catalogue |
+| `BorrowFlowTests` | 8 | the loan flow and its concurrency |
 | `DemoDataPolicyTests` | 7 | production is never seeded |
 | `ReturnFlowTests` | 6 | returning, and every way it can be wrong |
 | `ReadingTimeEstimatorTests` | 6 | median, outliers, fallback |
 | `DemoDataTests` | 6 | the demo library's invariants |
 | `GeneratedModelTests` | 2 | the seam between schema and generated code |
+
+`ApiEndpointTests` boots the real application in-process and talks to it over HTTP, so the
+status codes, the borrower filter and the DTO shapes are covered rather than trusted. On the
+frontend the tests cover the presentation logic that encodes a decision — the availability
+wording, and the difference between stating a median and hedging a guess — and nothing else.
+Coverage sits around 47% overall, which is what happens when the remainder is DTOs and
+generated code; the figure worth having is that the loan flow's branches are covered.
 
 ---
 

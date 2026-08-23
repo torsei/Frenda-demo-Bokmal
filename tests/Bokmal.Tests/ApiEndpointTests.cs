@@ -1,0 +1,265 @@
+using System.Net;
+using System.Net.Http.Json;
+using Bokmal.Api.Contracts;
+using Bokmal.Database.Entities;
+using Bokmal.Tests.Databases;
+using Microsoft.AspNetCore.Mvc;
+
+namespace Bokmal.Tests;
+
+/// <summary>
+/// The HTTP layer.
+///
+/// The services are tested directly elsewhere. What these cover is everything between a
+/// request and a service call: which outcome becomes which status code, whether an anonymous
+/// request is turned away, and whether the DTOs carry what the frontend needs. All of that is
+/// real branching, and none of it is exercised by calling a service in-process.
+/// </summary>
+public class ApiEndpointTests
+{
+    private const string Astrid = "astrid@example.se";
+    private const string Bjorn = "bjorn@example.se";
+
+    private static Task<Library> ALibraryAsync() => Library.WithAsync(b => b
+        .Book("dune", copies: 2)
+        .Book("neuromancer", copies: 1)
+        .Borrower(Astrid)
+        .Borrower(Bjorn));
+
+    private static async Task<LoanDto> BorrowAsync(HttpClient client, string slug)
+    {
+        var response = await client.PostAsJsonAsync("/api/loans", new BorrowRequest(slug));
+        response.EnsureSuccessStatusCode();
+
+        return (await response.Content.ReadFromJsonAsync<LoanDto>())!;
+    }
+
+    // ---------------------------------------------------------------- borrowing
+
+    [Fact]
+    public async Task Borrowing_returns_201_and_the_loan()
+    {
+        using var library = await ALibraryAsync();
+        var client = library.CreateApiClient(Astrid);
+
+        var response = await client.PostAsJsonAsync("/api/loans", new BorrowRequest("dune"));
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+        var loan = await response.Content.ReadFromJsonAsync<LoanDto>();
+        Assert.Equal("dune", loan!.BookSlug);
+        Assert.Null(loan.ReturnedAt);
+        Assert.False(loan.IsOverdue);
+        Assert.Equal(loan.BorrowedAt.AddDays(LoanPolicy.LoanPeriodDays), loan.DueAt);
+    }
+
+    [Fact]
+    public async Task Borrowing_the_same_book_twice_returns_409_with_a_reason()
+    {
+        using var library = await ALibraryAsync();
+        var client = library.CreateApiClient(Astrid);
+
+        await BorrowAsync(client, "dune");
+        var response = await client.PostAsJsonAsync("/api/loans", new BorrowRequest("dune"));
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+
+        // 409 rather than 400: the request was fine, the library's state was not. The
+        // frontend shows `detail` to the borrower, so it has to be a sentence.
+        var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>();
+        Assert.Equal("Already borrowed", problem!.Title);
+        Assert.False(string.IsNullOrWhiteSpace(problem.Detail));
+    }
+
+    [Fact]
+    public async Task Borrowing_past_the_loan_limit_returns_409()
+    {
+        using var library = await Library.WithAsync(builder =>
+        {
+            builder.Borrower(Astrid);
+            for (var i = 1; i <= LoanPolicy.MaxActiveLoansPerBorrower + 1; i++)
+                builder.Book($"book-{i}", copies: 1);
+        });
+
+        var client = library.CreateApiClient(Astrid);
+
+        for (var i = 1; i <= LoanPolicy.MaxActiveLoansPerBorrower; i++)
+            await BorrowAsync(client, $"book-{i}");
+
+        var response = await client.PostAsJsonAsync(
+            "/api/loans",
+            new BorrowRequest($"book-{LoanPolicy.MaxActiveLoansPerBorrower + 1}"));
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal("Loan limit reached", (await response.Content.ReadFromJsonAsync<ProblemDetails>())!.Title);
+    }
+
+    [Fact]
+    public async Task Borrowing_a_book_that_is_all_out_returns_409()
+    {
+        using var library = await ALibraryAsync();
+
+        await BorrowAsync(library.CreateApiClient(Astrid), "neuromancer");
+
+        var response = await library.CreateApiClient(Bjorn)
+            .PostAsJsonAsync("/api/loans", new BorrowRequest("neuromancer"));
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal("All copies are out", (await response.Content.ReadFromJsonAsync<ProblemDetails>())!.Title);
+    }
+
+    [Fact]
+    public async Task Borrowing_a_book_the_library_does_not_have_returns_404()
+    {
+        using var library = await ALibraryAsync();
+
+        var response = await library.CreateApiClient(Astrid)
+            .PostAsJsonAsync("/api/loans", new BorrowRequest("no-such-book"));
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    // ---------------------------------------------------------------- returning
+
+    [Fact]
+    public async Task Returning_returns_200_and_closes_the_loan()
+    {
+        using var library = await ALibraryAsync();
+        var client = library.CreateApiClient(Astrid);
+
+        var loan = await BorrowAsync(client, "dune");
+        var response = await client.PostAsync($"/api/loans/{loan.Id}/return", null);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull((await response.Content.ReadFromJsonAsync<LoanDto>())!.ReturnedAt);
+    }
+
+    [Fact]
+    public async Task Returning_the_same_loan_twice_returns_409()
+    {
+        using var library = await ALibraryAsync();
+        var client = library.CreateApiClient(Astrid);
+
+        var loan = await BorrowAsync(client, "dune");
+        await client.PostAsync($"/api/loans/{loan.Id}/return", null);
+
+        var response = await client.PostAsync($"/api/loans/{loan.Id}/return", null);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Returning_somebody_elses_loan_returns_404_rather_than_403()
+    {
+        // 403 would confirm the id exists. Cheap to avoid, so avoided.
+        using var library = await ALibraryAsync();
+
+        var loan = await BorrowAsync(library.CreateApiClient(Astrid), "dune");
+
+        var response = await library.CreateApiClient(Bjorn)
+            .PostAsync($"/api/loans/{loan.Id}/return", null);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    // ---------------------------------------------------------------- identity
+
+    [Theory]
+    [InlineData("/api/loans/me")]
+    [InlineData("/api/session")]
+    public async Task Endpoints_that_need_a_borrower_return_401_without_one(string path)
+    {
+        using var library = await ALibraryAsync();
+
+        var response = await library.CreateApiClient().GetAsync(path);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task An_unknown_address_is_not_a_borrower()
+    {
+        using var library = await ALibraryAsync();
+
+        var refused = await library.CreateApiClient("nobody@example.se").GetAsync("/api/loans/me");
+        Assert.Equal(HttpStatusCode.Unauthorized, refused.StatusCode);
+
+        var signIn = await library.CreateApiClient()
+            .PostAsJsonAsync("/api/session", new SignInRequest("nobody@example.se"));
+        Assert.Equal(HttpStatusCode.NotFound, signIn.StatusCode);
+    }
+
+    [Fact]
+    public async Task Signing_in_is_case_insensitive_about_the_address()
+    {
+        using var library = await ALibraryAsync();
+
+        var response = await library.CreateApiClient()
+            .PostAsJsonAsync("/api/session", new SignInRequest("  ASTRID@Example.SE  "));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(Astrid, (await response.Content.ReadFromJsonAsync<BorrowerDto>())!.Email);
+    }
+
+    // ---------------------------------------------------------------- reading
+
+    [Fact]
+    public async Task My_loans_separates_what_is_out_from_what_has_been_returned()
+    {
+        using var library = await ALibraryAsync();
+        var client = library.CreateApiClient(Astrid);
+
+        var returned = await BorrowAsync(client, "dune");
+        await client.PostAsync($"/api/loans/{returned.Id}/return", null);
+        await BorrowAsync(client, "neuromancer");
+
+        var mine = await client.GetFromJsonAsync<MyLoansDto>("/api/loans/me");
+
+        Assert.Equal("neuromancer", Assert.Single(mine!.Current).BookSlug);
+        Assert.Equal("dune", Assert.Single(mine.Past).BookSlug);
+    }
+
+    [Fact]
+    public async Task A_book_reports_the_availability_the_borrower_needs_to_decide()
+    {
+        using var library = await ALibraryAsync();
+
+        await BorrowAsync(library.CreateApiClient(Astrid), "dune");
+
+        var book = await library.CreateApiClient().GetFromJsonAsync<BookDetailDto>("/api/books/dune");
+
+        Assert.Equal(2, book!.Availability.TotalCopies);
+        Assert.Equal(1, book.Availability.AvailableCopies);
+        Assert.Equal(1, book.Availability.OnLoanCopies);
+        Assert.True(book.Availability.IsAvailable);
+    }
+
+    [Fact]
+    public async Task An_unknown_slug_is_a_404_and_the_catalogue_is_public()
+    {
+        using var library = await ALibraryAsync();
+        var anonymous = library.CreateApiClient();
+
+        Assert.Equal(HttpStatusCode.NotFound, (await anonymous.GetAsync("/api/books/nope")).StatusCode);
+
+        // Browsing needs no borrower. Only acting on a loan does.
+        var books = await anonymous.GetFromJsonAsync<List<BookSummaryDto>>("/api/books");
+        Assert.Equal(2, books!.Count);
+    }
+
+    [Fact]
+    public async Task Searching_matches_title_and_author_regardless_of_case()
+    {
+        using var library = await ALibraryAsync();
+        var client = library.CreateApiClient();
+
+        var byTitle = await client.GetFromJsonAsync<List<BookSummaryDto>>("/api/books?search=DUNE");
+        Assert.Equal("dune", Assert.Single(byTitle!).Slug);
+
+        var byAuthor = await client.GetFromJsonAsync<List<BookSummaryDto>>("/api/books?search=author");
+        Assert.Equal(2, byAuthor!.Count);
+
+        var noMatch = await client.GetFromJsonAsync<List<BookSummaryDto>>("/api/books?search=zzzz");
+        Assert.Empty(noMatch!);
+    }
+}

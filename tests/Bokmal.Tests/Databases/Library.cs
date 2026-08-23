@@ -18,6 +18,7 @@ namespace Bokmal.Tests.Databases;
 public sealed class Library : IDisposable
 {
     private readonly TestDatabase _database;
+    private BokmalApi? _api;
 
     public FakeTimeProvider Clock { get; } = new(new DateTimeOffset(2026, 5, 4, 9, 0, 0, TimeSpan.Zero));
 
@@ -37,6 +38,27 @@ public sealed class Library : IDisposable
     }
 
     public BokmalDbContext CreateContext() => _database.CreateContext();
+
+    /// <summary>
+    /// An HTTP client against the real application, wired to this library's database.
+    ///
+    /// The whole pipeline runs: routing, model binding, the borrower filter, the controllers
+    /// and the DTO mapping. Those layers hold real decisions -- which outcome becomes a 409
+    /// and which becomes a 404 -- that calling the services directly never exercises.
+    ///
+    /// One host per Library instance, created on first use.
+    /// </summary>
+    public HttpClient CreateApiClient(string? signedInAs = null)
+    {
+        _api ??= new BokmalApi(_database);
+
+        var client = _api.CreateClient();
+
+        if (signedInAs is not null)
+            client.DefaultRequestHeaders.Add("X-Borrower-Email", signedInAs);
+
+        return client;
+    }
 
     /// <summary>
     /// A service over its own context, because that is what a real request gets. Sharing one
@@ -75,7 +97,11 @@ public sealed class Library : IDisposable
             .CountAsync(c => c.Book.Slug == slug && c.Status == CopyStatuses.Available);
     }
 
-    public void Dispose() => _database.Dispose();
+    public void Dispose()
+    {
+        _api?.Dispose();
+        _database.Dispose();
+    }
 }
 
 public sealed class LibraryBuilder
