@@ -56,9 +56,21 @@ public sealed class DiscoveryService(BokmalDbContext context)
     ///
     /// A floor on the shared count keeps a book read by three people from topping the list
     /// on the strength of a coincidence.
+    ///
+    /// <param name="excludeBooksBorrowedBy">
+    /// When set, titles this borrower has already had out are dropped from the result. The
+    /// heading says "find your next book", and a book sitting on the reader's own bedside
+    /// table is not a next book.
+    ///
+    /// Note that this filters the *output* only. Their loans still count towards the signal,
+    /// because they are as much a data point about what goes with what as anyone else's --
+    /// removing them from the statistics would make the recommendations worse for everybody,
+    /// including them. Null for a visitor who has not signed in.
+    /// </param>
     /// </summary>
     public async Task<IReadOnlyList<Recommendation>> RecommendationsForAsync(
         Guid bookId,
+        Guid? excludeBooksBorrowedBy,
         int limit,
         CancellationToken cancellationToken)
     {
@@ -79,8 +91,14 @@ public sealed class DiscoveryService(BokmalDbContext context)
 
         var totalReaders = readerships.Select(r => r.BorrowerId).Distinct().Count();
 
+        // Taken from the readership rows already in hand rather than a second query, and
+        // applied before Take(limit) so filtering does not quietly return a short list.
+        var alreadyBorrowed = excludeBooksBorrowedBy is { } borrowerId
+            ? readerships.Where(r => r.BorrowerId == borrowerId).Select(r => r.BookId).ToHashSet()
+            : [];
+
         var ranked = readersByBook
-            .Where(entry => entry.Key != bookId)
+            .Where(entry => entry.Key != bookId && !alreadyBorrowed.Contains(entry.Key))
             .Select(entry =>
             {
                 var shared = entry.Value.Count(seedReaders.Contains);

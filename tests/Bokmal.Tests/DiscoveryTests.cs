@@ -90,7 +90,7 @@ public class DiscoveryTests
 
         var dune = await context.Books.SingleAsync(b => b.Slug == "dune");
         var recommendations = await library.CreateDiscoveryService(context)
-            .RecommendationsForAsync(dune.Id, limit: 5, default);
+            .RecommendationsForAsync(dune.Id, null, limit: 5, default);
 
         Assert.DoesNotContain(recommendations, r => r.Book.Slug == "dune");
     }
@@ -111,7 +111,7 @@ public class DiscoveryTests
 
         var dune = await context.Books.SingleAsync(b => b.Slug == "dune");
         var recommendations = await library.CreateDiscoveryService(context)
-            .RecommendationsForAsync(dune.Id, limit: 5, default);
+            .RecommendationsForAsync(dune.Id, null, limit: 5, default);
 
         Assert.Empty(recommendations);
     }
@@ -154,7 +154,7 @@ public class DiscoveryTests
 
         var dune = await context.Books.SingleAsync(b => b.Slug == "dune");
         var recommendations = await library.CreateDiscoveryService(context)
-            .RecommendationsForAsync(dune.Id, limit: 5, default);
+            .RecommendationsForAsync(dune.Id, null, limit: 5, default);
 
         Assert.Equal("companion", Assert.Single(recommendations).Book.Slug);
     }
@@ -184,7 +184,89 @@ public class DiscoveryTests
         var dune = await context.Books.SingleAsync(b => b.Slug == "dune");
 
         Assert.Empty(await library.CreateDiscoveryService(context)
-            .RecommendationsForAsync(dune.Id, limit: 5, default));
+            .RecommendationsForAsync(dune.Id, null, limit: 5, default));
+    }
+
+    /// <summary>
+    /// Builds a library where Dune's readers reliably also read two companion titles, so
+    /// both are strong recommendations for Dune. Six members read something else entirely,
+    /// which is what gives the comparison a population to work against.
+    /// </summary>
+    private static async Task<Library> WithTwoStrongCompanionsAsync()
+    {
+        var duneReaders = new[] { "a", "b", "c" };
+        var others = new[] { "d", "e", "f", "g", "h", "i" };
+
+        var library = await Library.WithAsync(builder =>
+        {
+            builder.Book("dune", copies: 1)
+                .Book("companion-one", copies: 1)
+                .Book("companion-two", copies: 1)
+                .Book("elsewhere", copies: 1);
+
+            foreach (var reader in duneReaders.Concat(others))
+                builder.Borrower($"{reader}@example.se");
+        });
+
+        await using var context = library.CreateContext();
+
+        foreach (var reader in duneReaders)
+        {
+            await RecordLoanAsync(context, "dune", $"{reader}@example.se");
+            await RecordLoanAsync(context, "companion-one", $"{reader}@example.se");
+            await RecordLoanAsync(context, "companion-two", $"{reader}@example.se");
+        }
+
+        foreach (var reader in others)
+            await RecordLoanAsync(context, "elsewhere", $"{reader}@example.se");
+
+        return library;
+    }
+
+    [Fact]
+    public async Task A_book_the_reader_has_already_borrowed_is_not_recommended_to_them()
+    {
+        // "Find your next book" has to mean next. Suggesting something already read, or worse
+        // something sitting on the reader's own bedside table right now, is the one way a
+        // recommendation can be both correct and actively unhelpful.
+        using var library = await WithTwoStrongCompanionsAsync();
+        await using var context = library.CreateContext();
+
+        var dune = await context.Books.SingleAsync(b => b.Slug == "dune");
+        var discovery = library.CreateDiscoveryService(context);
+
+        var anonymous = await discovery.RecommendationsForAsync(dune.Id, null, limit: 5, default);
+        Assert.Equal(
+            ["companion-one", "companion-two"],
+            anonymous.Select(r => r.Book.Slug).Order());
+
+        // Reader "a" has read both companions, so neither is news to them.
+        var readerA = await library.BorrowerIdAsync("a@example.se");
+        Assert.Empty(await discovery.RecommendationsForAsync(dune.Id, readerA, limit: 5, default));
+
+        // Reader "d" has read neither, and still gets both.
+        var readerD = await library.BorrowerIdAsync("d@example.se");
+        Assert.Equal(2, (await discovery.RecommendationsForAsync(dune.Id, readerD, limit: 5, default)).Count);
+    }
+
+    [Fact]
+    public async Task A_readers_own_loans_still_count_towards_what_gets_recommended()
+    {
+        // The filter applies to the output, not to the signal. Reader "a" is one of the three
+        // whose borrowing established that Dune and companion-two belong together; dropping
+        // their loans from the statistics would weaken the recommendation for everyone else.
+        using var library = await WithTwoStrongCompanionsAsync();
+        await using var context = library.CreateContext();
+
+        var dune = await context.Books.SingleAsync(b => b.Slug == "dune");
+        var readerD = await library.BorrowerIdAsync("d@example.se");
+
+        var forReaderD = await library.CreateDiscoveryService(context)
+            .RecommendationsForAsync(dune.Id, readerD, limit: 5, default);
+
+        // Three readers link Dune to its companion: a, b and c. Reader "a" is filtered out of
+        // their own recommendations, but is still one of the three counted here.
+        Assert.Equal(3, forReaderD.Single(r => r.Book.Slug == "companion-two").SharedBorrowers);
     }
 
     [Fact]
@@ -214,7 +296,7 @@ public class DiscoveryTests
 
         var dune = await context.Books.SingleAsync(b => b.Slug == "dune");
         var recommendation = Assert.Single(await library.CreateDiscoveryService(context)
-            .RecommendationsForAsync(dune.Id, limit: 5, default));
+            .RecommendationsForAsync(dune.Id, null, limit: 5, default));
 
         Assert.Equal(2, recommendation.Availability.TotalCopies);
         Assert.Equal(2, recommendation.Availability.AvailableCopies);

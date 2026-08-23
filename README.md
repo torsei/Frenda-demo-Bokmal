@@ -70,7 +70,7 @@ src/
   Bokmal.Api/          controllers, services, the loan flow
   Bokmal.Web/          Next.js frontend
 tests/
-  Bokmal.Tests/        42 tests, runnable against either database engine
+  Bokmal.Tests/        44 tests, runnable against either database engine
 ```
 
 `Bokmal.Web` is in the solution as a JavaScript project so it can be browsed from Solution
@@ -181,6 +181,12 @@ to have read that one, compared with a member picked at random". A title everyon
 scores no better than chance and drops out.
 
 A floor on the shared count keeps a coincidence between three people from topping the list.
+
+Titles the reader has already borrowed are dropped from the result — "find your next book"
+has to mean *next*, and suggesting something already on their own bedside table is the one
+way a recommendation can be both correct and useless. That filters the output only; their
+loans still count towards the signal, because removing them from the statistics would make
+the recommendations worse for everybody, themselves included.
 
 ---
 
@@ -320,7 +326,7 @@ dotnet test                                    # SQLite — about a second
 BOKMAL_TEST_PROVIDER=Postgres dotnet test      # PostgreSQL via Testcontainers — needs Docker
 ```
 
-42 tests, green on both.
+44 tests, green on both.
 
 Every test corresponds to one rule, so a failure says which rule broke. What is deliberately
 *not* tested: EF mappings, controller model binding, React components. Those test the
@@ -338,7 +344,7 @@ and one is already out.
 | Suite | | |
 |---|---|---|
 | `BorrowFlowTests` | 8 | the loan flow and its concurrency |
-| `DiscoveryTests` | 7 | top list, recommendations, catalogue |
+| `DiscoveryTests` | 9 | top list, recommendations, catalogue |
 | `DemoDataPolicyTests` | 7 | production is never seeded |
 | `ReturnFlowTests` | 6 | returning, and every way it can be wrong |
 | `ReadingTimeEstimatorTests` | 6 | median, outliers, fallback |

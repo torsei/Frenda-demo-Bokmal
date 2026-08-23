@@ -1,4 +1,5 @@
 using Bokmal.Api.Contracts;
+using Bokmal.Api.Identity;
 using Bokmal.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 
@@ -14,7 +15,8 @@ namespace Bokmal.Api.Controllers;
 public sealed class BooksController(
     CatalogueService catalogue,
     DiscoveryService discovery,
-    ReadingTimeService readingTimes) : ControllerBase
+    ReadingTimeService readingTimes,
+    ICurrentBorrower currentBorrower) : ControllerBase
 {
     /// <summary>Browse the shelves, optionally filtered by a search term or a genre.</summary>
     [HttpGet]
@@ -66,7 +68,12 @@ public sealed class BooksController(
         if (entry is null)
             return NotFound();
 
-        var recommendations = await discovery.RecommendationsForAsync(entry.Book.Id, limit: 5, cancellationToken);
+        // Anonymous browsing is fine here -- the catalogue is public. A visitor simply gets
+        // the unfiltered list, because there is nothing known about them to filter against.
+        var borrower = await currentBorrower.GetAsync(cancellationToken);
+
+        var recommendations = await discovery.RecommendationsForAsync(
+            entry.Book.Id, borrower?.Id, limit: 5, cancellationToken);
 
         var estimates = await readingTimes.EstimateAsync(
             recommendations.Select(r => r.Book.Id).ToList(), cancellationToken);
