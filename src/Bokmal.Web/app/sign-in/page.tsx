@@ -1,7 +1,7 @@
 import { api } from '@/lib/api';
 import { SignInForm } from './SignInForm';
 import { Mascot } from '@/components/Mascot';
-import { CopyEmailButton } from './CopyEmailButton';
+import { MemberList } from './MemberList';
 
 export default async function SignInPage() {
   const client = await api();
@@ -23,25 +23,15 @@ export default async function SignInPage() {
 
       {members.length > 0 ? (
         <div className="mt-10">
-          <h2 className="text-sm font-medium text-muted">Members you can sign in as</h2>
-          <ul className="mt-3 grid gap-0.5 text-sm">
-            {members.slice(0, 8).map((member) => (
-              <li key={member.id} className="flex items-center justify-between gap-4">
-                <span>{member.displayName}</span>
-                <span className="flex items-center gap-1">
-                  <span className="text-muted">{member.email}</span>
-                  <CopyEmailButton email={member.email} />
-                </span>
-              </li>
-            ))}
-          </ul>
+          <MemberList members={members.slice(0, 8)} />
           {members.length > 8 ? (
-            <p className="mt-2 text-xs text-muted">
-              …and {members.length - 8} more.
+            <p className="mt-2 px-2 text-xs text-muted">
+              &hellip;and {members.length - 8} more.
             </p>
           ) : null}
         </div>
       ) : null}
+
     </div>
   );
 }
