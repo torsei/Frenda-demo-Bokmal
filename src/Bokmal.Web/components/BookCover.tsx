@@ -6,43 +6,47 @@
  * costs nothing, always renders, and looks deliberate rather than borrowed.
  *
  * Deterministic: the same book always gets the same cover, because everything varying is
- * derived from the slug rather than from chance. A cover that changed on every render would
- * be worse than no cover at all.
+ * derived from the slug and the genre rather than from chance. A cover that changed on every
+ * render would be worse than no cover at all.
  */
 
 type Palette = {
   background: string;
-  band: string;
   ink: string;
   accent: string;
 };
 
-const PALETTES: Record<string, Palette[]> = {
-  'Science Fiction & Fantasy': [
-    { background: '#2a2a5e', band: '#3d3d82', ink: '#f0eefc', accent: '#8f8ce0' },
-    { background: '#1f3b5c', band: '#2d5480', ink: '#eaf2fa', accent: '#78a9d8' },
-  ],
-  Crime: [
-    { background: '#2c2321', band: '#43332f', ink: '#f5ece8', accent: '#c4685a' },
-    { background: '#3a2020', band: '#552e2e', ink: '#f7ebe8', accent: '#d08072' },
-  ],
-  'Literary Fiction': [
-    { background: '#25423c', band: '#345c53', ink: '#eef6f2', accent: '#7fb8a4' },
-    { background: '#2f4340', band: '#425f5a', ink: '#f0f5f3', accent: '#95b9b0' },
-  ],
-  Classics: [
-    { background: '#4a3520', band: '#63482c', ink: '#faf3e8', accent: '#c9a878' },
-    { background: '#553d28', band: '#6f5236', ink: '#fbf4ea', accent: '#d4b183' },
-  ],
-  'Non-fiction': [
-    { background: '#26333f', band: '#354756', ink: '#eef3f7', accent: '#88a8c0' },
-    { background: '#2f3a33', band: '#425046', ink: '#f0f4f1', accent: '#9ab4a3' },
-  ],
-};
+/**
+ * The colour a genre gets, derived from its name.
+ *
+ * This used to be a lookup table keyed on the genre strings, which meant the frontend had to
+ * know every genre the backend does. That is a duplication with the worst possible failure
+ * mode: rename a genre server-side and nothing breaks, the covers just quietly go grey and
+ * nobody notices for six months.
+ *
+ * Deriving the hue instead removes the coupling entirely. A genre the frontend has never
+ * heard of still gets a stable, distinct colour, and adding one to the library needs no
+ * frontend change at all.
+ *
+ * The honest version of this is a genre table, with the colour on the row and an admin
+ * screen to set it -- a colour is an attribute of a genre, and a librarian is the right
+ * person to choose it. That is a table, a foreign key and a screen more than this exercise
+ * calls for, so the colour is computed here instead and the catalogue keeps genre as a plain
+ * label. Nothing about this design blocks that change later.
+ *
+ * Saturation and lightness are fixed so every cover belongs to the same family however many
+ * genres appear. Two genres can land on neighbouring hues; the genre is written on the card
+ * beside the cover, so the colour is decoration rather than the only signal.
+ */
+function paletteFor(genre: string): Palette {
+  const hue = hash(genre) % 360;
 
-const FALLBACK: Palette[] = [
-  { background: '#33302b', band: '#474239', ink: '#f4f1ec', accent: '#b9ac97' },
-];
+  return {
+    background: `hsl(${hue} 24% 21%)`,
+    ink: `hsl(${hue} 16% 93%)`,
+    accent: `hsl(${hue} 44% 68%)`,
+  };
+}
 
 /** Small stable hash so a book's cover never changes between renders or machines. */
 function hash(value: string): number {
@@ -90,14 +94,11 @@ export function BookCover({
   slug: string;
   className?: string;
 }) {
-  const seed = hash(slug);
-  const options = PALETTES[genre] ?? FALLBACK;
-  const palette = options[seed % options.length];
-
+  const palette = paletteFor(genre);
   const titleLines = wrap(title.toUpperCase(), 12, 4);
 
   // Nudged per book so a shelf of covers does not look like one template repeated.
-  const bandOffset = 58 + (seed % 5) * 7;
+  const bandOffset = 58 + (hash(slug) % 5) * 7;
 
   return (
     <svg

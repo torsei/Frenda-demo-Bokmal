@@ -49,4 +49,18 @@ describe('BookCover', () => {
 
     expect(crimeFill).not.toBe(classicsFill);
   });
+
+  it('colours a genre it has never heard of', () => {
+    // The point of deriving the hue rather than looking it up. A genre added to the library
+    // needs no change here, and cannot silently fall through to a default.
+    const invented = render(<BookCover title="X" author="Y" genre="Maritime Poetry" slug="x" />);
+    const inventedFill = invented.container.querySelector('rect')?.getAttribute('fill');
+    invented.unmount();
+
+    const crime = render(<BookCover title="X" author="Y" genre="Crime" slug="x" />);
+    const crimeFill = crime.container.querySelector('rect')?.getAttribute('fill');
+
+    expect(inventedFill).toMatch(/^hsl\(/);
+    expect(inventedFill).not.toBe(crimeFill);
+  });
 });
