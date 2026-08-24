@@ -39,7 +39,9 @@ public sealed class DemoDataSeeder(
                 Email = demo.Email,
                 DisplayName = demo.DisplayName,
                 // Members did not all join on the same day.
-                JoinedAt = now.AddDays(-(500 + index * 37))
+                JoinedAt = demo.JustJoined
+                    ? now.AddDays(-6)
+                    : now.AddDays(-(500 + index * 37))
             })
             .ToList();
 
@@ -80,8 +82,18 @@ public sealed class DemoDataSeeder(
             b => b.Id,
             b => DemoCatalogue.Borrowers.Single(d => d.Email == b.Email).FavouriteGenre);
 
+        // New members are kept out of the invented history. If the generator could pick them
+        // they would end up with a dozen loans like everyone else, and the newcomer's view of
+        // the app would go back to being unreachable.
+        var newMemberEmails = DemoCatalogue.Borrowers
+            .Where(b => b.JustJoined)
+            .Select(b => b.Email)
+            .ToHashSet();
+
+        var established = borrowers.Where(b => !newMemberEmails.Contains(b.Email)).ToList();
+
         var loans = new LoanHistoryBuilder(timeProvider)
-            .Build(borrowers, demoByBookId, copies, borrowerGenres);
+            .Build(established, demoByBookId, copies, borrowerGenres);
 
         // Availability is read from book_copy.status, so it has to agree with the loans
         // that are still open. Deriving it here rather than setting it by hand means the

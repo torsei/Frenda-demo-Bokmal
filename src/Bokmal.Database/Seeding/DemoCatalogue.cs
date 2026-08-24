@@ -38,11 +38,18 @@ public sealed record DemoBook(
 /// borrowed..." mean something. Draw loans uniformly at random instead and every
 /// recommendation is technically correct and completely useless.
 /// </summary>
+/// <param name="JustJoined">
+/// A member with no borrowing history at all. Every other demo borrower has read a dozen
+/// books, which means the app can only ever be seen through the eyes of a regular -- and
+/// the parts that greet a newcomer, the empty "For you" shelf and the empty loan list,
+/// become unreachable. A real library always has somebody who joined last week.
+/// </param>
 public sealed record DemoBorrower(
     string Email,
     string DisplayName,
     string FavouriteGenre,
-    string SecondGenre);
+    string SecondGenre,
+    bool JustJoined = false);
 
 /// <summary>
 /// The contents of the demo library. Reference data, written out plainly so it can be read
@@ -116,6 +123,10 @@ public static class DemoCatalogue
     public static IReadOnlyList<DemoBorrower> Borrowers { get; } =
     [
         new("astrid.lindqvist@example.se", "Astrid Lindqvist", Genres.Crime, Genres.Literary),
+        // Named for the joke, and placed first because of it: "tom" is Swedish for empty, so
+        // the member with nothing in his history is Absolutely Empty. Sorts to the top of the
+        // sign-in list, which is where the newcomer's view of the app wants to be.
+        new("absolut.tom@example.se", "Absolut Tom", Genres.Literary, Genres.Crime, JustJoined: true),
         new("bjorn.ek@example.se", "Bjorn Ek", Genres.SciFiFantasy, Genres.NonFiction),
         new("cecilia.nordin@example.se", "Cecilia Nordin", Genres.Literary, Genres.Classics),
         new("david.holm@example.se", "David Holm", Genres.NonFiction, Genres.SciFiFantasy),
