@@ -18,7 +18,7 @@ export default async function BookPage({ params }: PageProps<'/books/[slug]'>) {
 
   return (
     <article>
-      <Link href="/" className="text-sm text-muted hover:text-foreground">
+      <Link href="/books" className="text-sm text-muted hover:text-foreground">
         ← Back to the shelves
       </Link>
 

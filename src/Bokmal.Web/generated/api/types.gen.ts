@@ -85,6 +85,11 @@ export type RecommendationDto = {
     sharedBorrowers: number;
 };
 
+export type RecommendationGroupDto = {
+    basedOn: BookSummaryDto;
+    books: Array<RecommendationDto>;
+};
+
 export type SignInRequest = {
     email: string;
 };
@@ -160,6 +165,34 @@ export type GetApiBooksTopResponses = {
 };
 
 export type GetApiBooksTopResponse = GetApiBooksTopResponses[keyof GetApiBooksTopResponses];
+
+export type GetApiBooksForMeData = {
+    body?: never;
+    path?: never;
+    query?: {
+        groups?: number;
+        perGroup?: number;
+    };
+    url: '/api/books/for-me';
+};
+
+export type GetApiBooksForMeErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ProblemDetails;
+};
+
+export type GetApiBooksForMeError = GetApiBooksForMeErrors[keyof GetApiBooksForMeErrors];
+
+export type GetApiBooksForMeResponses = {
+    /**
+     * OK
+     */
+    200: Array<RecommendationGroupDto>;
+};
+
+export type GetApiBooksForMeResponse = GetApiBooksForMeResponses[keyof GetApiBooksForMeResponses];
 
 export type GetApiBooksBySlugData = {
     body?: never;

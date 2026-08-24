@@ -65,7 +65,7 @@ export default async function MyLoansPage() {
             <Mascot size={96} className="h-24 w-24 shrink-0 object-contain" />
             <p className="text-muted">
               Nothing out at the moment.{' '}
-              <Link href="/" className="text-accent hover:underline">
+              <Link href="/books" className="text-accent hover:underline">
                 Find something to read
               </Link>
               .

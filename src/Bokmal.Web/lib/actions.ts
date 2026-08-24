@@ -21,7 +21,7 @@ export async function signIn(formData: FormData): Promise<ActionResult> {
   }
 
   await setCurrentBorrowerEmail(data.email);
-  redirect('/');
+  redirect('/books');
 }
 
 export async function signOut(): Promise<void> {

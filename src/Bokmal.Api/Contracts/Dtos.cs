@@ -48,6 +48,12 @@ public sealed record RecommendationDto(BookSummaryDto Book, int SharedBorrowers)
 
 public sealed record TopBookDto(BookSummaryDto Book, int BorrowCount);
 
+/// <summary>
+/// Suggestions with the book that prompted them, so the interface can say why. A blended
+/// list with no explanation is an assertion; "because you read Dune" is an argument.
+/// </summary>
+public sealed record RecommendationGroupDto(BookSummaryDto BasedOn, IReadOnlyList<RecommendationDto> Books);
+
 public sealed record LoanDto(
     Guid Id,
     Guid BookId,

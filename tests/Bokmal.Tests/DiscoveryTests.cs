@@ -270,6 +270,98 @@ public class DiscoveryTests
     }
 
     [Fact]
+    public async Task A_personal_shelf_is_grouped_by_the_books_that_prompted_it()
+    {
+        using var library = await WithTwoStrongCompanionsAsync();
+        await using var context = library.CreateContext();
+
+        // Reader "d" has read neither companion, so both are still news to them. Give them a
+        // finished loan of Dune to base suggestions on.
+        await RecordLoanAsync(context, "dune", "d@example.se");
+
+        var readerD = await library.BorrowerIdAsync("d@example.se");
+        var shelf = await library.CreateDiscoveryService(context)
+            .ForBorrowerAsync(readerD, groups: 2, perGroup: 3, default);
+
+        var group = Assert.Single(shelf);
+        Assert.Equal("dune", group.BasedOn.Slug);
+        Assert.Equal(
+            ["companion-one", "companion-two"],
+            group.Recommendations.Select(r => r.Book.Slug).Order());
+    }
+
+    [Fact]
+    public async Task A_personal_shelf_never_lists_the_same_book_under_two_headings()
+    {
+        // Two books with overlapping readerships would otherwise both suggest the same third
+        // title, which reads as a bug however sound the arithmetic behind it is.
+        var readers = new[] { "a", "b", "c", "d", "e", "f" };
+
+        using var library = await Library.WithAsync(builder =>
+        {
+            builder.Book("first", copies: 1).Book("second", copies: 1)
+                .Book("shared-favourite", copies: 1).Book("elsewhere", copies: 1);
+            foreach (var reader in readers) builder.Borrower($"{reader}@example.se");
+        });
+
+        await using var context = library.CreateContext();
+
+        foreach (var reader in readers.Take(3))
+        {
+            await RecordLoanAsync(context, "first", $"{reader}@example.se");
+            await RecordLoanAsync(context, "second", $"{reader}@example.se");
+            await RecordLoanAsync(context, "shared-favourite", $"{reader}@example.se");
+        }
+
+        foreach (var reader in readers.Skip(3))
+            await RecordLoanAsync(context, "elsewhere", $"{reader}@example.se");
+
+        // Reader "d" has finished both seeds and neither companion.
+        await RecordLoanAsync(context, "first", "d@example.se", days: 5);
+        await RecordLoanAsync(context, "second", "d@example.se", days: 9);
+
+        var readerD = await library.BorrowerIdAsync("d@example.se");
+        var shelf = await library.CreateDiscoveryService(context)
+            .ForBorrowerAsync(readerD, groups: 2, perGroup: 3, default);
+
+        var suggested = shelf.SelectMany(g => g.Recommendations.Select(r => r.Book.Slug)).ToList();
+
+        Assert.Equal(suggested.Count, suggested.Distinct().Count());
+        Assert.Contains("shared-favourite", suggested);
+    }
+
+    [Fact]
+    public async Task The_most_recently_finished_book_leads_the_personal_shelf()
+    {
+        using var library = await WithTwoStrongCompanionsAsync();
+        await using var context = library.CreateContext();
+
+        // Both are seeds; "companion-one" was handed back later, so it comes first.
+        await RecordLoanAsync(context, "dune", "d@example.se", days: 3);
+        await RecordLoanAsync(context, "companion-one", "d@example.se", days: 30);
+
+        var readerD = await library.BorrowerIdAsync("d@example.se");
+        var shelf = await library.CreateDiscoveryService(context)
+            .ForBorrowerAsync(readerD, groups: 2, perGroup: 3, default);
+
+        Assert.Equal("companion-one", shelf[0].BasedOn.Slug);
+    }
+
+    [Fact]
+    public async Task A_reader_who_has_finished_nothing_gets_no_personal_shelf()
+    {
+        // Nothing to base a suggestion on, so the section does not appear at all. An empty
+        // "For you" heading is worse than no heading.
+        using var library = await WithTwoStrongCompanionsAsync();
+        await using var context = library.CreateContext();
+
+        var newMember = await library.BorrowerIdAsync("i@example.se");
+
+        Assert.Empty(await library.CreateDiscoveryService(context)
+            .ForBorrowerAsync(newMember, groups: 2, perGroup: 3, default));
+    }
+
+    [Fact]
     public async Task Recommendations_carry_the_availability_the_reader_needs_to_act_on_them()
     {
         // Six members, not three. With a membership where everybody has read everything the

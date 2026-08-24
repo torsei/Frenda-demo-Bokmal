@@ -55,6 +55,44 @@ public sealed class BooksController(
     }
 
     /// <summary>
+    /// Suggestions for the signed-in borrower, grouped by the recently finished book that
+    /// prompted each one. Empty until they have returned something -- there is nothing
+    /// honest to base a suggestion on before that.
+    /// </summary>
+    [HttpGet("for-me")]
+    [RequireBorrower]
+    [ProducesResponseType<IReadOnlyList<RecommendationGroupDto>>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<IReadOnlyList<RecommendationGroupDto>>> ForMe(
+        [FromQuery] int groups = 2,
+        [FromQuery] int perGroup = 3,
+        CancellationToken cancellationToken = default)
+    {
+        var borrower = await currentBorrower.RequireAsync(cancellationToken);
+
+        var found = await discovery.ForBorrowerAsync(
+            borrower.Id, Math.Clamp(groups, 1, 5), Math.Clamp(perGroup, 1, 10), cancellationToken);
+
+        var bookIds = found
+            .SelectMany(g => g.Recommendations.Select(r => r.Book.Id).Append(g.BasedOn.Id))
+            .Distinct()
+            .ToList();
+
+        var estimates = await readingTimes.EstimateAsync(bookIds, cancellationToken);
+        var shelf = await catalogue.AvailabilityForAsync(bookIds, cancellationToken);
+
+        return Ok(found
+            .Select(g => new RecommendationGroupDto(
+                DtoMapping.ToSummary(g.BasedOn, shelf[g.BasedOn.Id], estimates[g.BasedOn.Id]),
+                g.Recommendations
+                    .Select(r => new RecommendationDto(
+                        DtoMapping.ToSummary(r.Book, r.Availability, estimates[r.Book.Id]),
+                        r.SharedBorrowers))
+                    .ToList()))
+            .ToList());
+    }
+
+    /// <summary>
     /// One book, with how many copies are on the shelf right now, how long it usually takes
     /// to read, and what its readers went on to borrow.
     /// </summary>

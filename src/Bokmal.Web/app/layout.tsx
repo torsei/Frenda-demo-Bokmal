@@ -31,13 +31,13 @@ export default async function RootLayout({ children }: LayoutProps<'/'>) {
       <body className="flex min-h-full flex-col font-sans">
         <header className="border-b border-border bg-surface">
           <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-6 gap-y-3 px-6 py-4">
-            <Link href="/" className="flex items-center gap-2 text-lg font-semibold tracking-tight">
+            <Link href="/books" className="flex items-center gap-2 text-lg font-semibold tracking-tight">
               <Mascot size={34} className="h-9 w-9 object-contain" priority />
               Bokmal
             </Link>
 
             <nav className="flex items-center gap-5 text-sm text-muted">
-              <Link href="/" className="hover:text-foreground">
+              <Link href="/books" className="hover:text-foreground">
                 Catalogue
               </Link>
               <Link href="/top" className="hover:text-foreground">

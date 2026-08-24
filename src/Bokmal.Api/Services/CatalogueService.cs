@@ -83,6 +83,31 @@ public sealed class CatalogueService(BokmalDbContext context, ReadingTimeService
             estimates[found.Book.Id]);
     }
 
+    /// <summary>
+    /// How many copies of each of these books are on the shelf. Used where books arrive from
+    /// somewhere other than a catalogue query -- a recommendation, say -- but still need a
+    /// card that says whether the reader can act on it.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<Guid, BookAvailability>> AvailabilityForAsync(
+        IReadOnlyList<Guid> bookIds,
+        CancellationToken cancellationToken)
+    {
+        if (bookIds.Count == 0)
+            return new Dictionary<Guid, BookAvailability>();
+
+        var counts = await context.Books
+            .Where(b => bookIds.Contains(b.Id))
+            .Select(b => new
+            {
+                b.Id,
+                TotalCopies = b.BookCopies.Count(),
+                AvailableCopies = b.BookCopies.Count(c => c.Status == CopyStatuses.Available)
+            })
+            .ToListAsync(cancellationToken);
+
+        return counts.ToDictionary(c => c.Id, c => new BookAvailability(c.TotalCopies, c.AvailableCopies));
+    }
+
     public Task<List<string>> ListGenresAsync(CancellationToken cancellationToken)
         => context.Books.Select(b => b.Genre).Distinct().OrderBy(g => g).ToListAsync(cancellationToken);
 

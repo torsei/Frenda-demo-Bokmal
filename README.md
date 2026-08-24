@@ -56,6 +56,7 @@ address. A few with different reading habits:
 
 | | |
 |---|---|
+| `absolut.tom@example.se` | joined last week, has never borrowed anything |
 | `astrid.lindqvist@example.se` | crime; several loans out and a long history |
 | `bjorn.ek@example.se` | science fiction and non-fiction |
 | `cecilia.nordin@example.se` | literary fiction and classics |
@@ -70,7 +71,7 @@ src/
   Bokmal.Api/          controllers, services, the loan flow
   Bokmal.Web/          Next.js frontend
 tests/
-  Bokmal.Tests/        60 tests, runnable against either database engine
+  Bokmal.Tests/        64 tests, runnable against either database engine
 ```
 
 `Bokmal.Web` is in the solution as a JavaScript project so it can be browsed from Solution
@@ -181,6 +182,13 @@ to have read that one, compared with a member picked at random". A title everyon
 scores no better than chance and drops out.
 
 A floor on the shared count keeps a coincidence between three people from topping the list.
+
+The catalogue opens with a **For you** shelf for members who have finished something, built
+from their two most recently returned books with three suggestions each. Grouping it that way
+rather than blending everything into one list is deliberate: naming the book that prompted a
+suggestion turns it into an argument the reader can weigh. Groups never repeat a title, and
+the section is absent entirely when there is nothing honest to base it on — sign in as
+Absolut Tom, a member since last week, to see what a newcomer gets.
 
 Titles the reader has already borrowed are dropped from the result — "find your next book"
 has to mean *next*, and suggesting something already on their own bedside table is the one
@@ -328,7 +336,7 @@ BOKMAL_TEST_PROVIDER=Postgres dotnet test      # PostgreSQL via Testcontainers �
 cd src/Bokmal.Web && npm test                  # the frontend
 ```
 
-60 backend tests, green on both engines, and 18 on the frontend.
+64 backend tests, green on both engines, and 18 on the frontend.
 
 Every test corresponds to one rule, so a failure says which rule broke. What is deliberately
 *not* tested: EF mappings, controller model binding, React components. Those test the
@@ -346,7 +354,7 @@ and one is already out.
 | Suite | | |
 |---|---|---|
 | `ApiEndpointTests` | 16 | the HTTP layer: which outcome becomes which status code |
-| `DiscoveryTests` | 9 | top list, recommendations, catalogue |
+| `DiscoveryTests` | 13 | top list, recommendations, catalogue |
 | `BorrowFlowTests` | 8 | the loan flow and its concurrency |
 | `DemoDataPolicyTests` | 7 | production is never seeded |
 | `ReturnFlowTests` | 6 | returning, and every way it can be wrong |

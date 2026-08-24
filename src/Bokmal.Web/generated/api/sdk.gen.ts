@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { GetApiBooksBySlugData, GetApiBooksBySlugErrors, GetApiBooksBySlugResponses, GetApiBooksData, GetApiBooksGenresData, GetApiBooksGenresResponses, GetApiBooksResponses, GetApiBooksTopData, GetApiBooksTopResponses, GetApiBorrowersData, GetApiBorrowersResponses, GetApiLoansMeData, GetApiLoansMeErrors, GetApiLoansMeResponses, GetApiSessionData, GetApiSessionErrors, GetApiSessionResponses, GetHealthData, GetHealthResponses, PostApiLoansByLoanIdReturnData, PostApiLoansByLoanIdReturnErrors, PostApiLoansByLoanIdReturnResponses, PostApiLoansData, PostApiLoansErrors, PostApiLoansResponses, PostApiSessionData, PostApiSessionErrors, PostApiSessionResponses } from './types.gen';
+import type { GetApiBooksBySlugData, GetApiBooksBySlugErrors, GetApiBooksBySlugResponses, GetApiBooksData, GetApiBooksForMeData, GetApiBooksForMeErrors, GetApiBooksForMeResponses, GetApiBooksGenresData, GetApiBooksGenresResponses, GetApiBooksResponses, GetApiBooksTopData, GetApiBooksTopResponses, GetApiBorrowersData, GetApiBorrowersResponses, GetApiLoansMeData, GetApiLoansMeErrors, GetApiLoansMeResponses, GetApiSessionData, GetApiSessionErrors, GetApiSessionResponses, GetHealthData, GetHealthResponses, PostApiLoansByLoanIdReturnData, PostApiLoansByLoanIdReturnErrors, PostApiLoansByLoanIdReturnResponses, PostApiLoansData, PostApiLoansErrors, PostApiLoansResponses, PostApiSessionData, PostApiSessionErrors, PostApiSessionResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -71,6 +71,10 @@ export class Sdk extends HeyApiClient {
     
     public getApiBooksTop<ThrowOnError extends boolean = false>(options?: Options<GetApiBooksTopData, ThrowOnError>): RequestResult<GetApiBooksTopResponses, unknown, ThrowOnError> {
         return (options?.client ?? this.client).get<GetApiBooksTopResponses, unknown, ThrowOnError>({ url: '/api/books/top', ...options });
+    }
+    
+    public getApiBooksForMe<ThrowOnError extends boolean = false>(options?: Options<GetApiBooksForMeData, ThrowOnError>): RequestResult<GetApiBooksForMeResponses, GetApiBooksForMeErrors, ThrowOnError> {
+        return (options?.client ?? this.client).get<GetApiBooksForMeResponses, GetApiBooksForMeErrors, ThrowOnError>({ url: '/api/books/for-me', ...options });
     }
     
     public getApiBooksBySlug<ThrowOnError extends boolean = false>(options: Options<GetApiBooksBySlugData, ThrowOnError>): RequestResult<GetApiBooksBySlugResponses, GetApiBooksBySlugErrors, ThrowOnError> {
