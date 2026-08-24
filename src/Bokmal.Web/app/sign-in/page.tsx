@@ -23,12 +23,7 @@ export default async function SignInPage() {
 
       {members.length > 0 ? (
         <div className="mt-10">
-          <MemberList members={members.slice(0, 8)} />
-          {members.length > 8 ? (
-            <p className="mt-2 px-2 text-xs text-muted">
-              &hellip;and {members.length - 8} more.
-            </p>
-          ) : null}
+          <MemberList members={members} />
         </div>
       ) : null}
 

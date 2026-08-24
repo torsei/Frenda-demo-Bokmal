@@ -115,6 +115,58 @@
         }
       }
     },
+    "/api/books/for-me": {
+      "get": {
+        "tags": [
+          "Books"
+        ],
+        "parameters": [
+          {
+            "name": "groups",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 2
+            }
+          },
+          {
+            "name": "perGroup",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 3
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RecommendationGroupDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/books/{slug}": {
       "get": {
         "tags": [
@@ -725,6 +777,24 @@
           "sharedBorrowers": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "RecommendationGroupDto": {
+        "required": [
+          "basedOn",
+          "books"
+        ],
+        "type": "object",
+        "properties": {
+          "basedOn": {
+            "$ref": "#/components/schemas/BookSummaryDto"
+          },
+          "books": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecommendationDto"
+            }
           }
         }
       },
