@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using Bokmal.Api.Contracts;
 using Bokmal.Api.Controllers;
+using Bokmal.Api.Observability;
 using Bokmal.Database;
 using Bokmal.Database.Entities;
 using Bokmal.Tests.Databases;
@@ -332,6 +333,36 @@ public class ApiEndpointTests
             .GetFromJsonAsync<List<RecommendationGroupDto>>("/api/books/for-me");
 
         Assert.Empty(shelf!);
+    }
+
+    // ---------------------------------------------------------------- tracing
+
+    [Fact]
+    public async Task Every_response_carries_a_correlation_id()
+    {
+        using var library = await ALibraryAsync();
+
+        var response = await library.CreateApiClient().GetAsync("/api/books");
+
+        // Returned so that a caller can quote it, and so a failing page can show it. Without
+        // that, "it broke" is the start of an investigation rather than the end of one.
+        Assert.True(response.Headers.TryGetValues(CorrelationId.HeaderName, out var values));
+        Assert.False(string.IsNullOrWhiteSpace(values!.Single()));
+    }
+
+    [Fact]
+    public async Task A_correlation_id_from_the_caller_is_kept_rather_than_replaced()
+    {
+        // The whole point. A borrow crosses the Next server and this API; if the second hop
+        // minted its own id the two halves of the story would never join up.
+        using var library = await ALibraryAsync();
+
+        var request = new HttpRequestMessage(HttpMethod.Get, "/api/books");
+        request.Headers.Add(CorrelationId.HeaderName, "a-caller-supplied-id");
+
+        var response = await library.CreateApiClient().SendAsync(request);
+
+        Assert.Equal("a-caller-supplied-id", response.Headers.GetValues(CorrelationId.HeaderName).Single());
     }
 
     [Fact]

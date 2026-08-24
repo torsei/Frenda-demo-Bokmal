@@ -71,7 +71,7 @@ src/
   Bokmal.Api/          controllers, services, the loan flow
   Bokmal.Web/          Next.js frontend
 tests/
-  Bokmal.Tests/        71 tests, runnable against either database engine
+  Bokmal.Tests/        73 tests, runnable against either database engine
 ```
 
 `Bokmal.Web` is in the solution as a JavaScript project so it can be browsed from Solution
@@ -349,6 +349,33 @@ copyrighted, and a cover API would add a network dependency that breaks the app 
 
 ---
 
+## Tracing a request
+
+A borrow crosses two processes: the browser posts to a Next.js server action, which calls
+this API. Both halves log under one **correlation id**, so grepping it returns the whole
+story in order rather than two fragments to match up by timestamp.
+
+The Next server mints one per incoming request and memoises it, so every call made while
+rendering a page shares it — a catalogue load asks for books, genres and the personal shelf,
+and all three arrive under the same id. The API keeps what it is given and only generates one
+when called directly.
+
+```
+CorrelationId:e4c319ff-1343-4b89-8a3f-a1655c11abfa
+  GET /api/session      responded 401 in  2ms
+  GET /api/books        responded 200 in 54ms
+  GET /api/books/genres responded 200 in 50ms
+```
+
+The id comes back in the `X-Correlation-Id` response header and in the body of a 500, so a
+report of "it broke" can carry the one thing that turns an investigation into a grep.
+
+Logs are plain text while developing and JSON otherwise — a human reads one, a machine the
+other. Message templates throughout, so the named values survive to the sink instead of being
+flattened into a sentence.
+
+---
+
 ## Tests
 
 ```bash
@@ -358,7 +385,7 @@ BOKMAL_TEST_PROVIDER=Postgres dotnet test      # PostgreSQL via Testcontainers �
 cd src/Bokmal.Web && npm test                  # the frontend
 ```
 
-71 backend tests, green on both engines, and 19 on the frontend.
+73 backend tests, green on both engines, and 19 on the frontend.
 
 Every test corresponds to one rule, so a failure says which rule broke. What is deliberately
 *not* tested: EF mappings, controller model binding, React components. Those test the
@@ -375,7 +402,7 @@ and one is already out.
 
 | Suite | | |
 |---|---|---|
-| `ApiEndpointTests` | 22 | the HTTP layer: which outcome becomes which status code |
+| `ApiEndpointTests` | 24 | the HTTP layer: which outcome becomes which status code |
 | `DiscoveryTests` | 13 | top list, recommendations, catalogue |
 | `BorrowFlowTests` | 9 | the loan flow and its concurrency |
 | `DemoDataPolicyTests` | 7 | production is never seeded |

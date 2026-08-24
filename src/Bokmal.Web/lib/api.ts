@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { cache } from 'react';
 import { createClient, createConfig } from '@/generated/api/client';
 import { Sdk } from '@/generated/api/sdk.gen';
 import { currentBorrowerEmail } from './session';
@@ -15,6 +16,20 @@ const API_BASE_URL = process.env.BOKMAL_API_URL ?? 'http://localhost:5080';
  * kept in step by hand. Named rather than inlined so it is findable when that day comes.
  */
 const BORROWER_HEADER = 'X-Borrower-Email';
+
+const CORRELATION_HEADER = 'X-Correlation-Id';
+
+/**
+ * One correlation id per incoming request, shared by every API call made while rendering it.
+ *
+ * A single page makes several calls -- the catalogue asks for books, genres and the personal
+ * shelf -- and they belong to one story. React's cache() memoises per request, so all of them
+ * carry the same id, and the API logs them under it.
+ *
+ * Generated here because this is the outermost edge that has one: the browser sends nothing.
+ * The API takes what it is given and only invents an id when called directly.
+ */
+const correlationId = cache(() => crypto.randomUUID());
 
 /**
  * The backend, typed.
@@ -35,7 +50,10 @@ export async function api(): Promise<Sdk> {
   const client = createClient(
     createConfig({
       baseUrl: API_BASE_URL,
-      headers: email ? { [BORROWER_HEADER]: email } : undefined,
+      headers: {
+        [CORRELATION_HEADER]: correlationId(),
+        ...(email ? { [BORROWER_HEADER]: email } : {}),
+      },
       // Loan state changes under the user's feet -- another borrower can take the last copy
       // between a page render and a click. Nothing here is cacheable.
       cache: 'no-store',

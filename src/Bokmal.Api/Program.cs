@@ -1,4 +1,5 @@
 using Bokmal.Api.Identity;
+using Bokmal.Api.Observability;
 using Bokmal.Api.Services;
 using Bokmal.Api.Startup;
 using System.Text.Json.Serialization;
@@ -6,6 +7,16 @@ using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Structured logging, meaning the named values in every message template stay named all the
+// way to the sink instead of being flattened into a sentence. Plain text while developing,
+// because a human is reading it; JSON everywhere else, because a machine is.
+builder.Logging.ClearProviders();
+
+if (builder.Environment.IsDevelopment())
+    builder.Logging.AddSimpleConsole(options => options.IncludeScopes = true);
+else
+    builder.Logging.AddJsonConsole(options => options.IncludeScopes = true);
 
 builder.Services.AddBokmalDatabase(builder.Configuration);
 
@@ -46,6 +57,10 @@ builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
+// First in the pipeline: everything after it, including the exception handler, logs under
+// the correlation id.
+app.UseMiddleware<CorrelationIdMiddleware>();
+
 app.UseExceptionHandler(handler => handler.Run(async context =>
 {
     var exception = context.Features.Get<IExceptionHandlerFeature>()?.Error;
@@ -62,7 +77,14 @@ app.UseExceptionHandler(handler => handler.Run(async context =>
         return;
     }
 
-    await Results.Problem(statusCode: StatusCodes.Status500InternalServerError).ExecuteAsync(context);
+    // The id goes back to the caller so that "it broke" can become "it broke, here is the
+    // id" -- which turns a bug report into a single grep.
+    await Results.Problem(
+        statusCode: StatusCodes.Status500InternalServerError,
+        extensions: new Dictionary<string, object?>
+        {
+            [CorrelationId.LogPropertyName] = CorrelationId.Of(context)
+        }).ExecuteAsync(context);
 }));
 
 app.MapOpenApi();
