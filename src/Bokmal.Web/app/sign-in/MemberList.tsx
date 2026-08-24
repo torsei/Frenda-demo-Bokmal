@@ -45,9 +45,7 @@ export function MemberList({ members }: { members: BorrowerDto[] }) {
                 setSigningInAs(member.email);
                 startTransition(async () => {
                   setError(null);
-                  const formData = new FormData();
-                  formData.set('email', member.email);
-                  const result = await signIn(formData);
+                  const result = await signIn(member.email);
                   // A successful sign-in redirects, so reaching here means it failed.
                   if (result && 'error' in result) setError(result.error);
                   setSigningInAs(null);

@@ -8,8 +8,19 @@ import { clearCurrentBorrower, setCurrentBorrowerEmail } from './session';
 
 export type ActionResult = { error: string } | { ok: true };
 
-export async function signIn(formData: FormData): Promise<ActionResult> {
-  const email = String(formData.get('email') ?? '').trim().toLowerCase();
+/**
+ * Takes an address rather than a FormData.
+ *
+ * A server action reached from a plain `<form action={...}>` is handed a FormData, which is
+ * the usual shape for one. But it is only the usual shape when a form is the only caller --
+ * here the member list calls this too, and building a FormData to carry a single string is
+ * ceremony that also spreads the field name `email` across files where nothing checks it.
+ *
+ * Pulling the value out of the form is the form's business, and it happens ten lines from
+ * the input it belongs to.
+ */
+export async function signIn(address: string): Promise<ActionResult> {
+  const email = address.trim().toLowerCase();
 
   if (!email) return { error: 'Enter the address you are a member under.' };
 

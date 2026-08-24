@@ -13,7 +13,7 @@ export function SignInForm() {
       action={(formData) =>
         startTransition(async () => {
           setError(null);
-          const result = await signIn(formData);
+          const result = await signIn(String(formData.get('email') ?? ''));
           // A successful sign-in redirects, so anything returned here is a failure.
           if (result && 'error' in result) setError(result.error);
         })
