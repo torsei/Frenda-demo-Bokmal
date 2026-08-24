@@ -195,6 +195,32 @@ public class ApiEndpointTests
     }
 
     [Fact]
+    public async Task An_empty_address_is_rejected_before_it_reaches_the_database()
+    {
+        using var library = await ALibraryAsync();
+
+        var response = await library.CreateApiClient()
+            .PostAsJsonAsync("/api/session", new SignInRequest("   "));
+
+        // 400 rather than 404: an empty address is a malformed request, not a member who
+        // happens not to exist.
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task The_member_list_is_available_to_a_visitor_who_is_not_signed_in()
+    {
+        // It has to be. With no passwords it is the only way to discover a valid address,
+        // and the sign-in page is by definition reached before signing in.
+        using var library = await ALibraryAsync();
+
+        var members = await library.CreateApiClient()
+            .GetFromJsonAsync<List<BorrowerDto>>("/api/borrowers");
+
+        Assert.Equal([Astrid, Bjorn], members!.Select(m => m.Email).Order());
+    }
+
+    [Fact]
     public async Task Signing_in_is_case_insensitive_about_the_address()
     {
         using var library = await ALibraryAsync();
@@ -250,6 +276,62 @@ public class ApiEndpointTests
         // Browsing needs no borrower. Only acting on a loan does.
         var books = await anonymous.GetFromJsonAsync<List<BookSummaryDto>>("/api/books");
         Assert.Equal(2, books!.Count);
+    }
+
+    [Fact]
+    public async Task The_top_list_is_ranked_and_public()
+    {
+        using var library = await ALibraryAsync();
+        var client = library.CreateApiClient(Astrid);
+
+        await BorrowAsync(library, client, "dune");
+
+        // Anonymous: discovery is part of browsing, not something you sign in for.
+        var top = await library.CreateApiClient()
+            .GetFromJsonAsync<List<TopBookDto>>("/api/books/top?limit=10");
+
+        Assert.Equal("dune", top![0].Book.Slug);
+        Assert.Equal(1, top[0].BorrowCount);
+        Assert.Equal(0, top[1].BorrowCount);
+    }
+
+    [Fact]
+    public async Task The_genre_list_offers_what_the_catalogue_actually_holds()
+    {
+        // The filter is built from this, so it must not offer a genre with nothing behind it.
+        using var library = await Library.WithAsync(b => b
+            .Book("dune", copies: 1, genre: "Science Fiction")
+            .Book("neuromancer", copies: 1, genre: "Science Fiction")
+            .Book("beloved", copies: 1, genre: "Literary Fiction")
+            .Borrower(Astrid));
+
+        var genres = await library.CreateApiClient()
+            .GetFromJsonAsync<List<string>>("/api/books/genres");
+
+        Assert.Equal(["Literary Fiction", "Science Fiction"], genres);
+    }
+
+    [Fact]
+    public async Task A_personal_shelf_needs_a_borrower()
+    {
+        using var library = await ALibraryAsync();
+
+        var response = await library.CreateApiClient().GetAsync("/api/books/for-me");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task A_member_who_has_finished_nothing_gets_an_empty_personal_shelf()
+    {
+        // The newcomer's view. An empty list rather than an error: there is nothing wrong,
+        // there is just nothing to say yet, and the interface renders no section at all.
+        using var library = await ALibraryAsync();
+
+        var shelf = await library.CreateApiClient(Astrid)
+            .GetFromJsonAsync<List<RecommendationGroupDto>>("/api/books/for-me");
+
+        Assert.Empty(shelf!);
     }
 
     [Fact]
