@@ -116,6 +116,45 @@ public class BorrowFlowTests
         Assert.Equal(BorrowOutcome.BookNotFound, result.Outcome);
     }
 
+    [Fact]
+    public async Task An_impossible_state_is_reported_rather_than_dressed_up_as_a_conflict()
+    {
+        // Manufactures the one thing the borrow flow refuses to paper over: a copy marked
+        // available while a loan on it is still open. Only a bug elsewhere could produce it,
+        // so the flow must not answer "try again later" -- the borrower would retry forever
+        // against an inconsistency that never clears, and nothing would ever be logged.
+        using var library = await Library.WithAsync(b => b.Book("dune", copies: 1).Borrower(Astrid).Borrower(Bjorn));
+
+        var astrid = await library.BorrowerIdAsync(Astrid);
+        var bjorn = await library.BorrowerIdAsync(Bjorn);
+        var dune = await library.BookIdAsync("dune");
+
+        await using (var setup = library.CreateContext())
+        {
+            var copyId = await setup.BookCopies.Where(c => c.BookId == dune).Select(c => c.Id).SingleAsync();
+
+            setup.Loans.Add(new Loan
+            {
+                Id = BokmalId.New(),
+                BookCopyId = copyId,
+                BorrowerId = bjorn,
+                BorrowedAt = library.Clock.GetUtcNow().UtcDateTime,
+                DueAt = library.Clock.GetUtcNow().UtcDateTime.AddDays(LoanPolicy.LoanPeriodDays),
+                ReturnedAt = null
+            });
+
+            // The copy stays Available, which is the corruption. The compare-and-swap will
+            // happily claim it and the unique index will then refuse the second open loan.
+            await setup.SaveChangesAsync();
+        }
+
+        await using var context = library.CreateContext();
+        var service = library.CreateLoanService(context);
+
+        await Assert.ThrowsAsync<DbUpdateException>(
+            () => service.BorrowAsync(astrid, dune, default));
+    }
+
     /// <summary>
     /// Eight requests arrive at once for a book with one copy left. Exactly one may win.
     ///

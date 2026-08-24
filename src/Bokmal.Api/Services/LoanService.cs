@@ -137,8 +137,39 @@ public sealed class LoanService(
             };
 
             context.Loans.Add(loan);
-            await context.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
+
+            try
+            {
+                await context.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+            }
+            catch (DbUpdateException exception)
+            {
+                // Getting here means the compare-and-swap above claimed this copy -- the
+                // database confirmed it moved from Available to OnLoan, so nobody else can
+                // hold it -- and writing the loan was refused anyway. The likeliest cause is
+                // a copy marked available while a loan on it was still open: the two
+                // disagree, which is a state nothing should be able to produce.
+                //
+                // Caught only to say that, with the identifiers needed to chase it. The raw
+                // constraint violation names the index but not the copy, the book or the
+                // borrower, and those are what somebody needs to fix it.
+                //
+                // Then rethrown, deliberately. Turning it into a polite "try again later"
+                // would be the worst available trade: the inconsistency does not clear by
+                // itself, so the borrower would retry forever while the error log stayed
+                // clean. It is a bug, and it should look like one.
+                //
+                // Note there is no inspection of which constraint failed. Doing that means
+                // reading provider-specific error codes, which is exactly what the engine
+                // seam exists to keep out of here. Describing the operation needs none.
+                logger.LogError(
+                    exception,
+                    "Claimed copy {CopyId} of {Title} for borrower {BorrowerId} but could not write the loan",
+                    copyId, book.Title, borrowerId);
+
+                throw;
+            }
 
             // Logged here rather than carried in the request. The server knows what the id
             // refers to by now, so the log can say more than a slug ever could.

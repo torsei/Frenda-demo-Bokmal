@@ -71,7 +71,7 @@ src/
   Bokmal.Api/          controllers, services, the loan flow
   Bokmal.Web/          Next.js frontend
 tests/
-  Bokmal.Tests/        64 tests, runnable against either database engine
+  Bokmal.Tests/        65 tests, runnable against either database engine
 ```
 
 `Bokmal.Web` is in the solution as a JavaScript project so it can be browsed from Solution
@@ -143,8 +143,13 @@ CREATE UNIQUE INDEX ux_loan_active_book_copy_id ON loan (book_copy_id)
 ```
 
 Returned loans fall out of the index entirely, so history is unlimited. The borrow flow does
-not depend on this index and never catches its violation — it is a backstop against a bug
-somewhere else, and if it fires that is exactly what it should look like.
+not depend on this index, and does not turn a violation of it into an answer for the
+borrower. Reaching that point means the conditional update claimed the copy and writing the
+loan was refused anyway — a copy marked available while a loan on it was still open, which
+nothing should be able to produce. It is caught only to log which copy, book and borrower
+were involved, since the raw constraint violation names the index and none of those, and is
+then rethrown. Answering "try again later" would leave the borrower retrying forever against
+an inconsistency that never clears, with a clean error log.
 
 The division is deliberate: **application code may fail politely, the database may not fail
 at all.**
@@ -353,7 +358,7 @@ BOKMAL_TEST_PROVIDER=Postgres dotnet test      # PostgreSQL via Testcontainers �
 cd src/Bokmal.Web && npm test                  # the frontend
 ```
 
-64 backend tests, green on both engines, and 18 on the frontend.
+65 backend tests, green on both engines, and 18 on the frontend.
 
 Every test corresponds to one rule, so a failure says which rule broke. What is deliberately
 *not* tested: EF mappings, controller model binding, React components. Those test the
@@ -372,7 +377,7 @@ and one is already out.
 |---|---|---|
 | `ApiEndpointTests` | 16 | the HTTP layer: which outcome becomes which status code |
 | `DiscoveryTests` | 13 | top list, recommendations, catalogue |
-| `BorrowFlowTests` | 8 | the loan flow and its concurrency |
+| `BorrowFlowTests` | 9 | the loan flow and its concurrency |
 | `DemoDataPolicyTests` | 7 | production is never seeded |
 | `ReturnFlowTests` | 6 | returning, and every way it can be wrong |
 | `ReadingTimeEstimatorTests` | 6 | median, outliers, fallback |
