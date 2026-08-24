@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using Bokmal.Api.Contracts;
+using Bokmal.Api.Controllers;
 using Bokmal.Database.Entities;
 using Bokmal.Tests.Databases;
 using Microsoft.AspNetCore.Mvc;
@@ -67,7 +68,7 @@ public class ApiEndpointTests
         // 409 rather than 400: the request was fine, the library's state was not. The
         // frontend shows `detail` to the borrower, so it has to be a sentence.
         var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>();
-        Assert.Equal("Already borrowed", problem!.Title);
+        Assert.Equal(LoansController.AlreadyBorrowedTitle, problem!.Title);
         Assert.False(string.IsNullOrWhiteSpace(problem.Detail));
     }
 
@@ -91,7 +92,8 @@ public class ApiEndpointTests
             new BorrowRequest($"book-{LoanPolicy.MaxActiveLoansPerBorrower + 1}"));
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-        Assert.Equal("Loan limit reached", (await response.Content.ReadFromJsonAsync<ProblemDetails>())!.Title);
+        Assert.Equal(LoansController.LoanLimitReachedTitle,
+            (await response.Content.ReadFromJsonAsync<ProblemDetails>())!.Title);
     }
 
     [Fact]
@@ -105,7 +107,8 @@ public class ApiEndpointTests
             .PostAsJsonAsync("/api/loans", new BorrowRequest("neuromancer"));
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-        Assert.Equal("All copies are out", (await response.Content.ReadFromJsonAsync<ProblemDetails>())!.Title);
+        Assert.Equal(LoansController.AllCopiesOutTitle,
+            (await response.Content.ReadFromJsonAsync<ProblemDetails>())!.Title);
     }
 
     [Fact]

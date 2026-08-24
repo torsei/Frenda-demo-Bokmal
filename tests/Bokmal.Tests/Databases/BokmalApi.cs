@@ -1,3 +1,4 @@
+using Bokmal.Api.Startup;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 
@@ -15,11 +16,16 @@ namespace Bokmal.Tests.Databases;
 /// </summary>
 public sealed class BokmalApi(TestDatabase database) : WebApplicationFactory<Program>
 {
+    private static string Key(string property) => $"{DatabaseOptions.SectionName}:{property}";
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
-        builder.UseSetting("Database:Provider", database.Engine.Provider.ToString());
-        builder.UseSetting("Database:ConnectionString", database.ConnectionString);
-        builder.UseSetting("Database:SeedDemoData", "false");
+        // Built from nameof rather than spelled out, so renaming a property on
+        // DatabaseOptions breaks this at compile time instead of silently leaving the tests
+        // pointed at whatever appsettings.json happens to say.
+        builder.UseSetting(Key(nameof(DatabaseOptions.Provider)), database.Engine.Provider.ToString());
+        builder.UseSetting(Key(nameof(DatabaseOptions.ConnectionString)), database.ConnectionString);
+        builder.UseSetting(Key(nameof(DatabaseOptions.SeedDemoData)), "false");
     }
 }

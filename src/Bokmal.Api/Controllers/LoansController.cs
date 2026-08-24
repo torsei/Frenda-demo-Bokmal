@@ -14,6 +14,16 @@ public sealed class LoansController(
     ICurrentBorrower currentBorrower,
     TimeProvider timeProvider) : ControllerBase
 {
+    // The titles are part of the contract, not just copy: a caller distinguishes one 409
+    // from another by them. Naming them keeps the tests from asserting on a literal that
+    // somebody will one day reword, and makes it obvious that rewording is a contract change.
+    public const string NoSuchBookTitle = "No such book";
+    public const string AllCopiesOutTitle = "All copies are out";
+    public const string AlreadyBorrowedTitle = "Already borrowed";
+    public const string LoanLimitReachedTitle = "Loan limit reached";
+    public const string NoSuchLoanTitle = "No such loan";
+    public const string AlreadyReturnedTitle = "Already returned";
+
     /// <summary>Everything the signed-in borrower has out now, and everything they have had.</summary>
     [HttpGet("me")]
     [ProducesResponseType<MyLoansDto>(StatusCodes.Status200OK)]
@@ -62,22 +72,22 @@ public sealed class LoansController(
             case BorrowOutcome.BookNotFound:
                 return Problem(
                     statusCode: StatusCodes.Status404NotFound,
-                    title: "No such book",
+                    title: NoSuchBookTitle,
                     detail: $"The catalogue has no book with the slug '{request.BookSlug}'.");
 
             case BorrowOutcome.NoCopyAvailable:
                 return Conflict(
-                    "All copies are out",
+                    AllCopiesOutTitle,
                     "Every copy of this book is currently on loan. Try again once one comes back.");
 
             case BorrowOutcome.AlreadyBorrowed:
                 return Conflict(
-                    "Already borrowed",
+                    AlreadyBorrowedTitle,
                     "You already have this book out. Return it before borrowing it again.");
 
             case BorrowOutcome.TooManyActiveLoans:
                 return Conflict(
-                    "Loan limit reached",
+                    LoanLimitReachedTitle,
                     $"You can have {Database.Entities.LoanPolicy.MaxActiveLoansPerBorrower} books out at a time. " +
                     "Return something before borrowing more.");
 
@@ -110,12 +120,12 @@ public sealed class LoansController(
             case ReturnOutcome.NotYourLoan:
                 return Problem(
                     statusCode: StatusCodes.Status404NotFound,
-                    title: "No such loan",
+                    title: NoSuchLoanTitle,
                     detail: "You have no loan with that id.");
 
             case ReturnOutcome.AlreadyReturned:
                 return Conflict(
-                    "Already returned",
+                    AlreadyReturnedTitle,
                     "This loan was closed earlier. Nothing more to do.");
 
             default:

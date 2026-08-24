@@ -1,3 +1,4 @@
+using Bokmal.Api.Identity;
 using Bokmal.Api.Services;
 using Bokmal.Database;
 using Bokmal.Database.Entities;
@@ -55,7 +56,7 @@ public sealed class Library : IDisposable
         var client = _api.CreateClient();
 
         if (signedInAs is not null)
-            client.DefaultRequestHeaders.Add("X-Borrower-Email", signedInAs);
+            client.DefaultRequestHeaders.Add(HeaderCurrentBorrower.HeaderName, signedInAs);
 
         return client;
     }
