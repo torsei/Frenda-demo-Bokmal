@@ -45,7 +45,7 @@ export type BorrowerDto = {
 };
 
 export type BorrowRequest = {
-    bookSlug: string;
+    bookId: string;
 };
 
 export type LoanDto = {

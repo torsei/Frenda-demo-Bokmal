@@ -407,7 +407,7 @@ public class DiscoveryTests
             await RecordLoanAsync(context, "dune", "a@example.se", days);
 
         var astrid = await library.BorrowerIdAsync("a@example.se");
-        await library.CreateLoanService(context).BorrowAsync(astrid, "dune", default);
+        await library.CreateLoanService(context).BorrowAsync(astrid, await library.BookIdAsync("dune"), default);
 
         await using var reader = library.CreateContext();
         var entry = await library.CreateCatalogueService(reader).FindAsync("dune", default);

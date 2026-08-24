@@ -20,7 +20,7 @@ public class ReturnFlowTests
         var astrid = await library.BorrowerIdAsync(Astrid);
 
         await using var context = library.CreateContext();
-        var borrowed = await library.CreateLoanService(context).BorrowAsync(astrid, "dune", default);
+        var borrowed = await library.CreateLoanService(context).BorrowAsync(astrid, await library.BookIdAsync("dune"), default);
 
         return (library, astrid, borrowed.Loan!.Id);
     }
@@ -52,7 +52,7 @@ public class ReturnFlowTests
 
         await using (var blocked = library.CreateContext())
         {
-            var refused = await library.CreateLoanService(blocked).BorrowAsync(bjorn, "dune", default);
+            var refused = await library.CreateLoanService(blocked).BorrowAsync(bjorn, await library.BookIdAsync("dune"), default);
             Assert.Equal(BorrowOutcome.NoCopyAvailable, refused.Outcome);
         }
 
@@ -60,7 +60,7 @@ public class ReturnFlowTests
             await library.CreateLoanService(returning).ReturnAsync(astrid, loanId, default);
 
         await using var borrowing = library.CreateContext();
-        var allowed = await library.CreateLoanService(borrowing).BorrowAsync(bjorn, "dune", default);
+        var allowed = await library.CreateLoanService(borrowing).BorrowAsync(bjorn, await library.BookIdAsync("dune"), default);
 
         Assert.Equal(BorrowOutcome.Borrowed, allowed.Outcome);
     }
@@ -95,7 +95,7 @@ public class ReturnFlowTests
             await library.CreateLoanService(returning).ReturnAsync(astrid, loanId, default);
 
         await using (var borrowing = library.CreateContext())
-            await library.CreateLoanService(borrowing).BorrowAsync(bjorn, "dune", default);
+            await library.CreateLoanService(borrowing).BorrowAsync(bjorn, await library.BookIdAsync("dune"), default);
 
         await using (var retry = library.CreateContext())
             await library.CreateLoanService(retry).ReturnAsync(astrid, loanId, default);

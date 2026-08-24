@@ -79,12 +79,12 @@ public sealed class LoanService(
     /// backstop against a bug in some other code path, and if it ever fires that is what it
     /// should look like.
     /// </summary>
-    public async Task<BorrowResult> BorrowAsync(Guid borrowerId, string bookSlug, CancellationToken cancellationToken)
+    public async Task<BorrowResult> BorrowAsync(Guid borrowerId, Guid bookId, CancellationToken cancellationToken)
     {
         await using var transaction = await engine.BeginWriteTransactionAsync(context, cancellationToken);
 
         var book = await context.Books
-            .SingleOrDefaultAsync(b => b.Slug == bookSlug, cancellationToken);
+            .SingleOrDefaultAsync(b => b.Id == bookId, cancellationToken);
 
         if (book is null)
             return new BorrowResult(BorrowOutcome.BookNotFound);
@@ -102,13 +102,13 @@ public sealed class LoanService(
         if (activeBookIds.Count >= LoanPolicy.MaxActiveLoansPerBorrower)
             return new BorrowResult(BorrowOutcome.TooManyActiveLoans);
 
-        var candidateCopyIds = await context.BookCopies
+        var candidates = await context.BookCopies
             .Where(c => c.BookId == book.Id && c.Status == CopyStatuses.Available)
             .OrderBy(c => c.CopyNumber)
-            .Select(c => c.Id)
+            .Select(c => new { c.Id, c.CopyNumber })
             .ToListAsync(cancellationToken);
 
-        foreach (var copyId in candidateCopyIds)
+        foreach (var (copyId, copyNumber) in candidates.Select(c => (c.Id, c.CopyNumber)))
         {
             // Compare-and-swap. The WHERE re-states the condition the decision rested on,
             // so the write can only land if that condition still holds.
@@ -139,6 +139,12 @@ public sealed class LoanService(
             context.Loans.Add(loan);
             await context.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
+
+            // Logged here rather than carried in the request. The server knows what the id
+            // refers to by now, so the log can say more than a slug ever could.
+            logger.LogInformation(
+                "Lent {Title} copy {CopyNumber} to borrower {BorrowerId}, due {DueAt:yyyy-MM-dd}",
+                book.Title, copyNumber, borrowerId, loan.DueAt);
 
             return new BorrowResult(BorrowOutcome.Borrowed, loan);
         }

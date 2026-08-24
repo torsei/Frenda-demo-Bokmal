@@ -82,6 +82,16 @@ public sealed class Library : IDisposable
         return await context.Borrowers.Where(b => b.Email == email).Select(b => b.Id).SingleAsync();
     }
 
+    /// <summary>
+    /// Borrowing names a book by id, so tests that build a library by slug need the
+    /// translation. Kept here rather than repeated in every test.
+    /// </summary>
+    public async Task<Guid> BookIdAsync(string slug)
+    {
+        await using var context = CreateContext();
+        return await context.Books.Where(b => b.Slug == slug).Select(b => b.Id).SingleAsync();
+    }
+
     public async Task<string> CopyStatusAsync(string slug, int copyNumber)
     {
         await using var context = CreateContext();

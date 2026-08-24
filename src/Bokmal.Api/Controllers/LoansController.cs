@@ -60,7 +60,7 @@ public sealed class LoansController(
         CancellationToken cancellationToken)
     {
         var borrower = await currentBorrower.RequireAsync(cancellationToken);
-        var result = await loans.BorrowAsync(borrower.Id, request.BookSlug, cancellationToken);
+        var result = await loans.BorrowAsync(borrower.Id, request.BookId, cancellationToken);
 
         switch (result.Outcome)
         {
@@ -73,7 +73,7 @@ public sealed class LoansController(
                 return Problem(
                     statusCode: StatusCodes.Status404NotFound,
                     title: NoSuchBookTitle,
-                    detail: $"The catalogue has no book with the slug '{request.BookSlug}'.");
+                    detail: $"The catalogue has no book with the id '{request.BookId}'.");
 
             case BorrowOutcome.NoCopyAvailable:
                 return Conflict(

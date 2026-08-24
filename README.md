@@ -81,6 +81,23 @@ Explorer, with the solution build turned off for it. The reasoning is in `Bokmal
 
 ## How it is put together
 
+### Identifiers
+
+Reads address the catalogue by **slug** — `GET /api/books/dune` — because they end up in URLs
+that people link and share. Writes reference **ids**, because a command is a statement about
+identity and that is what an id is for.
+
+Readability in logs was the argument for using a slug in the borrow request too, and it is a
+real one. It is solved on the server instead, which knows the book once it has resolved it
+and can say more than a slug could:
+
+```
+Lent The Fifth Season copy 2 to borrower 01a03329-…, due 2026-09-21
+```
+
+Carrying both a slug and an id in the request would have meant two identifiers that can
+disagree, and a decorative one that nothing keeps honest.
+
 ### Books and copies
 
 A `Book` is a title. A `BookCopy` is a physical object on a shelf. A `Loan` is of a **copy**,

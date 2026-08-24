@@ -49,7 +49,7 @@ export default async function BookPage({ params }: PageProps<'/books/[slug]'>) {
         </div>
 
         {signedIn ? (
-          <BorrowButton slug={book.slug} disabled={!book.availability.isAvailable} />
+          <BorrowButton bookId={book.id} disabled={!book.availability.isAvailable} />
         ) : (
           <Link
             href="/sign-in"

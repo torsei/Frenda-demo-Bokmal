@@ -40,9 +40,9 @@ export async function signOut(): Promise<void> {
   redirect('/sign-in');
 }
 
-export async function borrow(bookSlug: string): Promise<ActionResult> {
+export async function borrow(bookId: string): Promise<ActionResult> {
   const client = await api();
-  const { error } = await client.postApiLoans({ body: { bookSlug } });
+  const { error } = await client.postApiLoans({ body: { bookId } });
 
   if (error) {
     return { error: problemMessage(error, 'The book could not be borrowed.') };

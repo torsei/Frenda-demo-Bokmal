@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using Bokmal.Api.Contracts;
 using Bokmal.Api.Controllers;
+using Bokmal.Database;
 using Bokmal.Database.Entities;
 using Bokmal.Tests.Databases;
 using Microsoft.AspNetCore.Mvc;
@@ -27,9 +28,10 @@ public class ApiEndpointTests
         .Borrower(Astrid)
         .Borrower(Bjorn));
 
-    private static async Task<LoanDto> BorrowAsync(HttpClient client, string slug)
+    private static async Task<LoanDto> BorrowAsync(Library library, HttpClient client, string slug)
     {
-        var response = await client.PostAsJsonAsync("/api/loans", new BorrowRequest(slug));
+        var response = await client.PostAsJsonAsync(
+            "/api/loans", new BorrowRequest(await library.BookIdAsync(slug)));
         response.EnsureSuccessStatusCode();
 
         return (await response.Content.ReadFromJsonAsync<LoanDto>())!;
@@ -43,7 +45,7 @@ public class ApiEndpointTests
         using var library = await ALibraryAsync();
         var client = library.CreateApiClient(Astrid);
 
-        var response = await client.PostAsJsonAsync("/api/loans", new BorrowRequest("dune"));
+        var response = await client.PostAsJsonAsync("/api/loans", new BorrowRequest(await library.BookIdAsync("dune")));
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
@@ -60,8 +62,8 @@ public class ApiEndpointTests
         using var library = await ALibraryAsync();
         var client = library.CreateApiClient(Astrid);
 
-        await BorrowAsync(client, "dune");
-        var response = await client.PostAsJsonAsync("/api/loans", new BorrowRequest("dune"));
+        await BorrowAsync(library, client, "dune");
+        var response = await client.PostAsJsonAsync("/api/loans", new BorrowRequest(await library.BookIdAsync("dune")));
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
 
@@ -85,11 +87,11 @@ public class ApiEndpointTests
         var client = library.CreateApiClient(Astrid);
 
         for (var i = 1; i <= LoanPolicy.MaxActiveLoansPerBorrower; i++)
-            await BorrowAsync(client, $"book-{i}");
+            await BorrowAsync(library, client, $"book-{i}");
 
         var response = await client.PostAsJsonAsync(
             "/api/loans",
-            new BorrowRequest($"book-{LoanPolicy.MaxActiveLoansPerBorrower + 1}"));
+            new BorrowRequest(await library.BookIdAsync($"book-{LoanPolicy.MaxActiveLoansPerBorrower + 1}")));
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         Assert.Equal(LoansController.LoanLimitReachedTitle,
@@ -101,10 +103,10 @@ public class ApiEndpointTests
     {
         using var library = await ALibraryAsync();
 
-        await BorrowAsync(library.CreateApiClient(Astrid), "neuromancer");
+        await BorrowAsync(library, library.CreateApiClient(Astrid), "neuromancer");
 
         var response = await library.CreateApiClient(Bjorn)
-            .PostAsJsonAsync("/api/loans", new BorrowRequest("neuromancer"));
+            .PostAsJsonAsync("/api/loans", new BorrowRequest(await library.BookIdAsync("neuromancer")));
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         Assert.Equal(LoansController.AllCopiesOutTitle,
@@ -117,7 +119,7 @@ public class ApiEndpointTests
         using var library = await ALibraryAsync();
 
         var response = await library.CreateApiClient(Astrid)
-            .PostAsJsonAsync("/api/loans", new BorrowRequest("no-such-book"));
+            .PostAsJsonAsync("/api/loans", new BorrowRequest(BokmalId.New()));
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -130,7 +132,7 @@ public class ApiEndpointTests
         using var library = await ALibraryAsync();
         var client = library.CreateApiClient(Astrid);
 
-        var loan = await BorrowAsync(client, "dune");
+        var loan = await BorrowAsync(library, client, "dune");
         var response = await client.PostAsync($"/api/loans/{loan.Id}/return", null);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -143,7 +145,7 @@ public class ApiEndpointTests
         using var library = await ALibraryAsync();
         var client = library.CreateApiClient(Astrid);
 
-        var loan = await BorrowAsync(client, "dune");
+        var loan = await BorrowAsync(library, client, "dune");
         await client.PostAsync($"/api/loans/{loan.Id}/return", null);
 
         var response = await client.PostAsync($"/api/loans/{loan.Id}/return", null);
@@ -157,7 +159,7 @@ public class ApiEndpointTests
         // 403 would confirm the id exists. Cheap to avoid, so avoided.
         using var library = await ALibraryAsync();
 
-        var loan = await BorrowAsync(library.CreateApiClient(Astrid), "dune");
+        var loan = await BorrowAsync(library, library.CreateApiClient(Astrid), "dune");
 
         var response = await library.CreateApiClient(Bjorn)
             .PostAsync($"/api/loans/{loan.Id}/return", null);
@@ -212,9 +214,9 @@ public class ApiEndpointTests
         using var library = await ALibraryAsync();
         var client = library.CreateApiClient(Astrid);
 
-        var returned = await BorrowAsync(client, "dune");
+        var returned = await BorrowAsync(library, client, "dune");
         await client.PostAsync($"/api/loans/{returned.Id}/return", null);
-        await BorrowAsync(client, "neuromancer");
+        await BorrowAsync(library, client, "neuromancer");
 
         var mine = await client.GetFromJsonAsync<MyLoansDto>("/api/loans/me");
 
@@ -227,7 +229,7 @@ public class ApiEndpointTests
     {
         using var library = await ALibraryAsync();
 
-        await BorrowAsync(library.CreateApiClient(Astrid), "dune");
+        await BorrowAsync(library, library.CreateApiClient(Astrid), "dune");
 
         var book = await library.CreateApiClient().GetFromJsonAsync<BookDetailDto>("/api/books/dune");
 

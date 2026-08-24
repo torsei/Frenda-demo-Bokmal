@@ -621,12 +621,13 @@
       },
       "BorrowRequest": {
         "required": [
-          "bookSlug"
+          "bookId"
         ],
         "type": "object",
         "properties": {
-          "bookSlug": {
-            "type": "string"
+          "bookId": {
+            "type": "string",
+            "format": "uuid"
           }
         }
       },

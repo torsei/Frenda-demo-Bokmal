@@ -45,7 +45,7 @@ function ActionButton({
   );
 }
 
-export function BorrowButton({ slug, disabled }: { slug: string; disabled?: boolean }) {
+export function BorrowButton({ bookId, disabled }: { bookId: string; disabled?: boolean }) {
   if (disabled) {
     return (
       <button
@@ -58,7 +58,7 @@ export function BorrowButton({ slug, disabled }: { slug: string; disabled?: bool
     );
   }
 
-  return <ActionButton label="Borrow" pendingLabel="Borrowing…" action={() => borrow(slug)} />;
+  return <ActionButton label="Borrow" pendingLabel="Borrowing…" action={() => borrow(bookId)} />;
 }
 
 export function ReturnButton({ loanId }: { loanId: string }) {

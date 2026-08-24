@@ -1,4 +1,5 @@
 using Bokmal.Api.Services;
+using Bokmal.Database;
 using Bokmal.Database.Entities;
 using Bokmal.Tests.Databases;
 using Microsoft.EntityFrameworkCore;
@@ -21,7 +22,7 @@ public class BorrowFlowTests
         var astrid = await library.BorrowerIdAsync(Astrid);
 
         await using var context = library.CreateContext();
-        var result = await library.CreateLoanService(context).BorrowAsync(astrid, "dune", default);
+        var result = await library.CreateLoanService(context).BorrowAsync(astrid, await library.BookIdAsync("dune"), default);
 
         Assert.Equal(BorrowOutcome.Borrowed, result.Outcome);
         Assert.Equal(1, await library.AvailableCopiesAsync("dune"));
@@ -35,7 +36,7 @@ public class BorrowFlowTests
         var astrid = await library.BorrowerIdAsync(Astrid);
 
         await using var context = library.CreateContext();
-        var result = await library.CreateLoanService(context).BorrowAsync(astrid, "dune", default);
+        var result = await library.CreateLoanService(context).BorrowAsync(astrid, await library.BookIdAsync("dune"), default);
 
         var loan = result.Loan!;
         Assert.Equal(library.Clock.GetUtcNow().UtcDateTime, loan.BorrowedAt);
@@ -51,10 +52,10 @@ public class BorrowFlowTests
         var bjorn = await library.BorrowerIdAsync(Bjorn);
 
         await using var first = library.CreateContext();
-        await library.CreateLoanService(first).BorrowAsync(astrid, "dune", default);
+        await library.CreateLoanService(first).BorrowAsync(astrid, await library.BookIdAsync("dune"), default);
 
         await using var second = library.CreateContext();
-        var result = await library.CreateLoanService(second).BorrowAsync(bjorn, "dune", default);
+        var result = await library.CreateLoanService(second).BorrowAsync(bjorn, await library.BookIdAsync("dune"), default);
 
         Assert.Equal(BorrowOutcome.NoCopyAvailable, result.Outcome);
     }
@@ -66,10 +67,10 @@ public class BorrowFlowTests
         var astrid = await library.BorrowerIdAsync(Astrid);
 
         await using var first = library.CreateContext();
-        await library.CreateLoanService(first).BorrowAsync(astrid, "dune", default);
+        await library.CreateLoanService(first).BorrowAsync(astrid, await library.BookIdAsync("dune"), default);
 
         await using var second = library.CreateContext();
-        var result = await library.CreateLoanService(second).BorrowAsync(astrid, "dune", default);
+        var result = await library.CreateLoanService(second).BorrowAsync(astrid, await library.BookIdAsync("dune"), default);
 
         Assert.Equal(BorrowOutcome.AlreadyBorrowed, result.Outcome);
 
@@ -92,13 +93,13 @@ public class BorrowFlowTests
         for (var i = 1; i <= LoanPolicy.MaxActiveLoansPerBorrower; i++)
         {
             await using var context = library.CreateContext();
-            var allowed = await library.CreateLoanService(context).BorrowAsync(astrid, $"book-{i}", default);
+            var allowed = await library.CreateLoanService(context).BorrowAsync(astrid, await library.BookIdAsync($"book-{i}"), default);
             Assert.Equal(BorrowOutcome.Borrowed, allowed.Outcome);
         }
 
         await using var last = library.CreateContext();
         var refused = await library.CreateLoanService(last)
-            .BorrowAsync(astrid, $"book-{LoanPolicy.MaxActiveLoansPerBorrower + 1}", default);
+            .BorrowAsync(astrid, await library.BookIdAsync($"book-{LoanPolicy.MaxActiveLoansPerBorrower + 1}"), default);
 
         Assert.Equal(BorrowOutcome.TooManyActiveLoans, refused.Outcome);
     }
@@ -110,7 +111,7 @@ public class BorrowFlowTests
         var astrid = await library.BorrowerIdAsync(Astrid);
 
         await using var context = library.CreateContext();
-        var result = await library.CreateLoanService(context).BorrowAsync(astrid, "no-such-book", default);
+        var result = await library.CreateLoanService(context).BorrowAsync(astrid, BokmalId.New(), default);
 
         Assert.Equal(BorrowOutcome.BookNotFound, result.Outcome);
     }
@@ -149,10 +150,12 @@ public class BorrowFlowTests
         for (var i = 0; i < contenders; i++)
             borrowerIds.Add(await library.BorrowerIdAsync($"reader-{i}@example.se"));
 
+        var dune = await library.BookIdAsync("dune");
+
         var attempts = borrowerIds.Select(async borrowerId =>
         {
             await using var context = library.CreateContext();
-            return await library.CreateLoanService(context).BorrowAsync(borrowerId, "dune", default);
+            return await library.CreateLoanService(context).BorrowAsync(borrowerId, dune, default);
         });
 
         var results = await Task.WhenAll(attempts);
@@ -183,10 +186,12 @@ public class BorrowFlowTests
         for (var i = 0; i < contenders; i++)
             borrowerIds.Add(await library.BorrowerIdAsync($"reader-{i}@example.se"));
 
+        var dune = await library.BookIdAsync("dune");
+
         var results = await Task.WhenAll(borrowerIds.Select(async borrowerId =>
         {
             await using var context = library.CreateContext();
-            return await library.CreateLoanService(context).BorrowAsync(borrowerId, "dune", default);
+            return await library.CreateLoanService(context).BorrowAsync(borrowerId, dune, default);
         }));
 
         Assert.Equal(copies, results.Count(r => r.Outcome == BorrowOutcome.Borrowed));
